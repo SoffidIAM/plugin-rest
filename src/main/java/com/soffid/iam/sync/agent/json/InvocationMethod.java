@@ -8,5 +8,6 @@ public class InvocationMethod
 	public String method;
 	public String results;
 	public String check;
+	public String next;
 	public String[] parameters;
 }

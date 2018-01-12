@@ -1,6 +1,5 @@
 package com.soffid.iam.sync.agent.json;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.rmi.RemoteException;
@@ -8,7 +7,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -19,15 +17,14 @@ import javax.ws.rs.core.MediaType;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.wink.client.ClientConfig;
 import org.apache.wink.client.ClientResponse;
-import org.apache.wink.client.Resource;
+import org.apache.wink.client.ClientRuntimeException;
+import org.apache.wink.client.ClientWebException;
 import org.apache.wink.client.RestClient;
 import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.apache.wink.common.http.HttpStatus;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import com.soffid.iam.api.RoleGrant;
 
 import es.caib.seycon.ng.comu.Account;
 import es.caib.seycon.ng.comu.Grup;
@@ -40,11 +37,9 @@ import es.caib.seycon.ng.comu.SoffidObjectType;
 import es.caib.seycon.ng.comu.Usuari;
 import es.caib.seycon.ng.exception.InternalErrorException;
 import es.caib.seycon.ng.exception.UnknownUserException;
-import es.caib.seycon.ng.remote.RemoteServiceLocator;
 import es.caib.seycon.ng.sync.agent.Agent;
 import es.caib.seycon.ng.sync.engine.extobj.AccountExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.AttributeReference;
-import es.caib.seycon.ng.sync.engine.extobj.AttributeReferenceParser;
 import es.caib.seycon.ng.sync.engine.extobj.ExtensibleObjectFinder;
 import es.caib.seycon.ng.sync.engine.extobj.GrantExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.GroupExtensibleObject;
@@ -129,6 +124,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		serverUrl = getDispatcher().getParam4();
 		debugEnabled = "true".equals(getDispatcher().getParam8());
 
+		createClient();
+	}
+
+	private void createClient() {
 		// create a client to send the user/group crud requests
 		config = new ApacheHttpClientConfig(new DefaultHttpClient());
 		if ("token".equals(authMethod))
@@ -830,142 +829,185 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
-	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object) throws InternalErrorException, JSONException {
-
+	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object) throws InternalErrorException, JSONException 
+	{
 		String path = translatePath (m, object);
-		
-		ClientResponse response;
-		if ( "GET".equalsIgnoreCase(m.method)) {
-			if (m.encoding == null)
-				m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
-			String params = encode(m, object);
-			if (params != null && ! params.isEmpty())
-				path = path +"?"+params;
-			if (debugEnabled)
-				log.info("Invoking GET on "+path);
-			response = client.resource(path)
-					.accept(MediaType.APPLICATION_JSON)
-					.get();
-		} else if ( "post".equalsIgnoreCase(m.method)) {
-			if (m.encoding == null)
-				m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
-			String params = encode(m, object);
-			
-			if (debugEnabled)
-				log.info("Invoking POST on "+path+": "+params);
-			
-			response = client.resource(path)
-					.contentType(MediaType.valueOf(m.encoding))
-					.accept(MediaType.APPLICATION_JSON)
-					.post(params);
-		} else if ( "put".equalsIgnoreCase(m.method))  {
-			if (m.encoding == null)
-				m.method = MediaType.APPLICATION_FORM_URLENCODED;
-			String params = encode(m, object);
-
-			if (debugEnabled)
-				log.info("Invoking PUT on "+path+": "+params);
-
-			response = client.resource(path)
-					.contentType(m.encoding)
-					.accept(MediaType.APPLICATION_JSON)
-					.put(params);
-		} else if ( "delete".equalsIgnoreCase(m.method)) {
-			if (m.encoding == null)
-				m.method = MediaType.APPLICATION_FORM_URLENCODED;
-			String params = encode(m, object);
-			if (params != null && ! params.isEmpty())
-				path = path +"?"+params;
-
-			if (debugEnabled)
-				log.info("Invoking DELETE on "+path);
-			
-			response = client.resource(path)
-					.accept(MediaType.APPLICATION_JSON)
-					.delete();
-		} else 
-			throw new InternalErrorException("Unknown method "+m.method);
- 
-		
-		if (response.getStatusCode() == HttpStatus.NOT_FOUND.getCode())
+		boolean repeat = false;
+		boolean addParams = true;
+		ExtensibleObjects eos = new ExtensibleObjects();
+		do
 		{
-			response.consumeContent();
-			return null;
-		}
-		if (response.getStatusCode() != HttpStatus.OK.getCode() &&
-				response.getStatusCode() != HttpStatus.CREATED.getCode())
-		{
-			response.consumeContent();
-			throw new RuntimeException("Error on invocation "+response.getMessage());
-		}
-
-		String txt = response.getEntity(String.class);
-		ExtensibleObject resp = new ExtensibleObject();
-		resp.setObjectType(object.getObjectType());
-		if (txt.startsWith("{"))
-		{
-			JSONObject respOb  = new JSONObject(txt);
-			Map<String, Object> map = new HashMap<String, Object>();
-			json2map(respOb, map );
-			resp.putAll(map);
-		} else if (txt.startsWith("[")) {
-			JSONArray respOb  = new JSONArray(txt);
-			Map<String, Object> map = new HashMap<String, Object>();
-			map.put("result", json2java(respOb));
-			resp.putAll(map);
-			if (m.results == null) 
-				m.results = "result";
-		} else {
-			throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+txt);
-		}
-		
-		if (debugEnabled)
-		{
-			debugObject("Received from "+path, resp, "  ");
-		}
-		
-		if (m.check != null && !m.check.isEmpty())
-		{
-			objectTranslator.eval(m.check, resp);
-		}
-	
-		if (m.results != null)
-		{
-			ExtensibleObjects eos = new ExtensibleObjects();
-			if (debugEnabled)
-				log.info("Parsing results");
-			Object result = objectTranslator.eval(m.results, resp);
-			if (result instanceof Collection)
+			repeat = false;
+			try
 			{
-				for (Object o: ((Collection) result))
-				{
-					ExtensibleObject eo = new ExtensibleObject();
-					eo.setObjectType(object.getObjectType());
-					if (o instanceof Map)
-						eo.putAll((Map<? extends String, ? extends Object>) o);
-					else
-						eo.put("result", o);
+				ClientResponse response;
+				if ( "GET".equalsIgnoreCase(m.method)) {
+					if (m.encoding == null)
+						m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
+					if (addParams)
+					{
+						String params = encode(m, object);
+						if (params != null && ! params.isEmpty())
+							path = path +"?"+params;
+					}
 					if (debugEnabled)
-						debugObject("Parsod object:", eo, "  ");
-					eos.getObjects().add(eo);
+						log.info("Invoking GET on "+path);
+					response = client.resource(path)
+							.accept(MediaType.APPLICATION_JSON)
+							.get();
+				} else if ( "post".equalsIgnoreCase(m.method)) {
+					if (m.encoding == null)
+						m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
+					String params = encode(m, object);
+					
+					if (debugEnabled)
+						log.info("Invoking POST on "+path+": "+params);
+					
+					response = client.resource(path)
+							.contentType(MediaType.valueOf(m.encoding))
+							.accept(MediaType.APPLICATION_JSON)
+							.post(params);
+				} else if ( "put".equalsIgnoreCase(m.method))  {
+					if (m.encoding == null)
+						m.method = MediaType.APPLICATION_FORM_URLENCODED;
+					String params = encode(m, object);
+		
+					if (debugEnabled)
+						log.info("Invoking PUT on "+path+": "+params);
+		
+					response = client.resource(path)
+							.contentType(m.encoding)
+							.accept(MediaType.APPLICATION_JSON)
+							.put(params);
+				} else if ( "delete".equalsIgnoreCase(m.method)) {
+					if (m.encoding == null)
+						m.method = MediaType.APPLICATION_FORM_URLENCODED;
+					String params = encode(m, object);
+					if (params != null && ! params.isEmpty())
+						path = path +"?"+params;
+		
+					if (debugEnabled)
+						log.info("Invoking DELETE on "+path);
+					
+					response = client.resource(path)
+							.accept(MediaType.APPLICATION_JSON)
+							.delete();
+				} else {
+					if (m.encoding == null)
+						m.method = MediaType.APPLICATION_FORM_URLENCODED;
+					String params = encode(m, object);
+		
+					if (debugEnabled)
+						log.info("Invoking "+m.method+" on "+path+": "+params);
+		
+					response = client.resource(path)
+							.contentType(m.encoding)
+							.accept(MediaType.APPLICATION_JSON)
+							.invoke(m.method, ClientResponse.class, params);
 				}
-			}
-			else
-			{
-				ExtensibleObject eo = new ExtensibleObject();
-				eo.setObjectType(object.getObjectType());
+		 
+				
+				if (response.getStatusCode() == HttpStatus.NOT_FOUND.getCode())
+				{
+					response.consumeContent();
+					return null;
+				}
+				if (response.getStatusCode() != HttpStatus.OK.getCode() &&
+						response.getStatusCode() != HttpStatus.CREATED.getCode())
+				{
+					String text = response.getEntity(String.class);
+					if (debugEnabled)
+					{
+						log.info("ERROR "+response.getMessage()+": \n"+text);
+					}
+	
+					throw new RuntimeException("Error on invocation "+response.getMessage()+"\n"+text);
+				}
+		
+				String txt = response.getEntity(String.class);
+				ExtensibleObject resp = new ExtensibleObject();
+				resp.setObjectType(object.getObjectType());
+				if (txt.startsWith("{"))
+				{
+					JSONObject respOb  = new JSONObject(txt);
+					Map<String, Object> map = new HashMap<String, Object>();
+					json2map(respOb, map );
+					resp.putAll(map);
+				} else if (txt.startsWith("[")) {
+					JSONArray respOb  = new JSONArray(txt);
+					Map<String, Object> map = new HashMap<String, Object>();
+					map.put("result", json2java(respOb));
+					resp.putAll(map);
+					if (m.results == null) 
+						m.results = "result";
+				} else {
+					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+txt);
+				}
+				
 				if (debugEnabled)
-					debugObject("Parsod object:", eo, "  ");
-				eos.getObjects().add(eo);
+				{
+					debugObject("Received from "+path, resp, "  ");
+				}
+				
+				if (m.check != null && !m.check.isEmpty())
+				{
+					objectTranslator.eval(m.check, resp);
+				}
+			
+				if (m.results != null)
+				{
+					if (debugEnabled)
+						log.info("Parsing results");
+					Object result = objectTranslator.eval(m.results, resp);
+					if (result instanceof Collection)
+					{
+						for (Object o: ((Collection) result))
+						{
+							ExtensibleObject eo = new ExtensibleObject();
+							eo.setObjectType(object.getObjectType());
+							if (o instanceof Map)
+								eo.putAll((Map<? extends String, ? extends Object>) o);
+							else
+								eo.put("result", o);
+							if (debugEnabled)
+								debugObject("Parsed object:", eo, "  ");
+							eos.getObjects().add(eo);
+						}
+					}
+					else
+					{
+						ExtensibleObject eo = new ExtensibleObject();
+						eo.setObjectType(object.getObjectType());
+						if (debugEnabled)
+							debugObject("Parsed object:", eo, "  ");
+						eos.getObjects().add(eo);
+					}
+	
+					if (m.next != null && !m.next.isEmpty())
+					{
+						path = (String) objectTranslator.eval(m.next, resp);
+						if (path != null)
+						{
+							log.info("Jumping to next page: "+path);
+							repeat = true;
+							addParams = false;
+						}
+					}
+				}
+				else
+				{
+					eos.getObjects().add(resp);
+				}
+			} catch (ClientWebException e) {
+				createClient();
+				throw new InternalErrorException ("Error "+e.getResponse().getStatusCode()+":"+e.getResponse().getMessage(),
+						e);
+			} catch (ClientRuntimeException e) {
+				createClient();
+				throw e;
 			}
-			return eos;
-		}
-		else
-		{
-			ExtensibleObjects eos = new ExtensibleObjects();
-			eos.getObjects().add(resp);
-			return eos;
-		}
+		} while (repeat);
+		return eos;
 	}
 
 	private String translatePath(InvocationMethod m, ExtensibleObject object) throws InternalErrorException {
@@ -1163,6 +1205,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.results = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Check"))
 					im.check = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("Next"))
+					im.next = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Method"))
 					im.method = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Encoding"))
@@ -1261,13 +1305,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			}
 			else if (obj instanceof Map)
 			{
-				log.info (indent+attributeName+":");
+				log.info (indent+attributeName+" {");
 				Map<String,Object> m = (Map<String, Object>) obj;
 				for (String attribute: m.keySet())
 				{
 					Object subObj = m.get(attribute);
 					debugObject(null, subObj, indent+"   ", attribute+": ");
 				}
+				log.info (indent+" }");
 			}
 			else
 			{
