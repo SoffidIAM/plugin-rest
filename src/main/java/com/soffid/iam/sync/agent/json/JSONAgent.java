@@ -97,7 +97,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	protected Collection<ExtensibleObjectMapping> objectMappings;
 	// --------------------------------------------------------------
 
-	private ClientConfig config;
+	private ApacheHttpClientConfig config;
 
 	private RestClient client;
 
@@ -140,7 +140,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			BasicAuthSecurityHandler handler = new BasicAuthSecurityHandler(loginDN, password.getPassword());
 			config.handlers(handler);
 		}
-		
+		config.setChunked(false);
 		client = new RestClient(config);
 	}
 
