@@ -19,6 +19,7 @@ import org.apache.wink.client.ClientConfig;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientRuntimeException;
 import org.apache.wink.client.ClientWebException;
+import org.apache.wink.client.Resource;
 import org.apache.wink.client.RestClient;
 import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.apache.wink.common.http.HttpStatus;
@@ -675,7 +676,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	public void updateUser(Account acc, Usuari user) throws RemoteException,
 			InternalErrorException {
 		ExtensibleObject sourceObject = new UserExtensibleObject(acc, user, getServer());
-		sourceObject.setAttribute("password", getServer().getOrGenerateUserPassword(acc.getName(), getCodi()).getPassword());
+		sourceObject.setAttribute("password", getPassword(acc).getPassword());
 		try {
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
@@ -702,10 +703,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	private Password getPassword(Account acc) throws InternalErrorException {
+		Password p = getServer().getAccountPassword(acc.getName(), getCodi());
+		if ( p == null)
+			p = getServer().generateFakePassword(acc.getName(), getCodi());
+		return p;
+	}
+
 	public void updateUser(Account acc) throws InternalErrorException {
 		
 		ExtensibleObject sourceObject = new AccountExtensibleObject(acc, getServer());
-		sourceObject.setAttribute("password", getServer().getOrGenerateUserPassword(acc.getName(), getCodi()).getPassword());
+		sourceObject.setAttribute("password", getPassword(acc).getPassword());
 		try {
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
@@ -852,58 +860,53 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					}
 					if (debugEnabled)
 						log.info("Invoking GET on "+path);
-					response = client.resource(path)
-							.accept(MediaType.APPLICATION_JSON)
-							.get();
-				} else if ( "post".equalsIgnoreCase(m.method)) {
-					if (m.encoding == null)
-						m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
-					String params = encode(m, object);
-					
-					if (debugEnabled)
-						log.info("Invoking POST on "+path+": "+params);
-					
-					response = client.resource(path)
-							.contentType(MediaType.valueOf(m.encoding))
-							.accept(MediaType.APPLICATION_JSON)
-							.post(params);
-				} else if ( "put".equalsIgnoreCase(m.method))  {
-					if (m.encoding == null)
-						m.method = MediaType.APPLICATION_FORM_URLENCODED;
-					String params = encode(m, object);
-		
-					if (debugEnabled)
-						log.info("Invoking PUT on "+path+": "+params);
-		
-					response = client.resource(path)
-							.contentType(m.encoding)
-							.accept(MediaType.APPLICATION_JSON)
-							.put(params);
-				} else if ( "delete".equalsIgnoreCase(m.method)) {
-					if (m.encoding == null)
-						m.method = MediaType.APPLICATION_FORM_URLENCODED;
-					String params = encode(m, object);
-					if (params != null && ! params.isEmpty())
-						path = path +"?"+params;
-		
-					if (debugEnabled)
-						log.info("Invoking DELETE on "+path);
-					
-					response = client.resource(path)
-							.accept(MediaType.APPLICATION_JSON)
-							.delete();
+					Resource request = client.resource(path)
+							.accept(MediaType.APPLICATION_JSON);
+					response = request.get();
 				} else {
-					if (m.encoding == null)
-						m.method = MediaType.APPLICATION_FORM_URLENCODED;
-					String params = encode(m, object);
-		
-					if (debugEnabled)
-						log.info("Invoking "+m.method+" on "+path+": "+params);
-		
-					response = client.resource(path)
+					Resource request = client.resource(path)
 							.contentType(m.encoding)
-							.accept(MediaType.APPLICATION_JSON)
-							.invoke(m.method, ClientResponse.class, params);
+							.accept(MediaType.APPLICATION_JSON);
+					addHeaders (request, m);
+					if ( "post".equalsIgnoreCase(m.method)) {
+						if (m.encoding == null)
+							m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
+						String params = encode(m, object);
+						
+						if (debugEnabled)
+							log.info("Invoking POST on "+path+": "+params);
+						
+						response = request.post(params);
+					} else if ( "put".equalsIgnoreCase(m.method))  {
+						if (m.encoding == null)
+							m.method = MediaType.APPLICATION_FORM_URLENCODED;
+						String params = encode(m, object);
+
+						if (debugEnabled)
+							log.info("Invoking PUT on "+path+": "+params);
+
+						response = request.put(params);
+					} else if ( "delete".equalsIgnoreCase(m.method)) {
+						if (m.encoding == null)
+							m.method = MediaType.APPLICATION_FORM_URLENCODED;
+						String params = encode(m, object);
+						if (params != null && ! params.isEmpty())
+							path = path +"?"+params;
+
+						if (debugEnabled)
+							log.info("Invoking DELETE on "+path);
+						
+						response = request.delete();
+					} else {
+						if (m.encoding == null)
+							m.method = MediaType.APPLICATION_FORM_URLENCODED;
+						String params = encode(m, object);
+
+						if (debugEnabled)
+							log.info("Invoking "+m.method+" on "+path+": "+params);
+
+						response = request.invoke(m.method, ClientResponse.class, params);
+					}
 				}
 		 
 				
@@ -1008,6 +1011,12 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			}
 		} while (repeat);
 		return eos;
+	}
+
+	private void addHeaders(Resource request, InvocationMethod m) {
+		if (m.headers != null)
+			for (String[] header: m.headers)
+				request.header(header[0], header[1]);
 	}
 
 	private String translatePath(InvocationMethod m, ExtensibleObject object) throws InternalErrorException {
@@ -1213,6 +1222,23 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.encoding = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Params"))
 					im.parameters = mapping.getProperties().get(k).split("[, ]+");
+				else if (tag.toLowerCase().startsWith("header"))
+				{
+					String v = mapping.getProperties().get(k);
+					int i = v.indexOf(':');
+					if (im.headers == null)
+						im.headers = new LinkedList<String[]>();
+					if (i > 0)
+						im.headers.add(new String [] {
+								v.substring(0, i).trim(),
+								v.substring(i+1).trim()
+						});
+					else
+						im.headers.add(new String [] {
+								v.trim(),
+								""
+						});
+				}
 				else
 					throw new InternalErrorException("Unexpected property "+k+" for object type "+objectType);
 			}
