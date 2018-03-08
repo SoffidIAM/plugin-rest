@@ -950,7 +950,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					resp.putAll(map);
 					if (m.results == null) 
 						m.results = "result";
-				} else {
+				} else if (! txt.isEmpty()) {
 					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+txt);
 				}
 				
