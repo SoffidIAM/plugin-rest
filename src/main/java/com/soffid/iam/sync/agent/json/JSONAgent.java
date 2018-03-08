@@ -393,38 +393,41 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						SoffidObjectType.OBJECT_ACCOUNT)) {
 					Account acc = getServer()
 							.getAccountInfo(accountName, getCodi());
-					ExtensibleObject obj = objectTranslator.generateObject(
-							new AccountExtensibleObject(acc, getServer()), mapping);
-					if (obj != null) {
-						obj = searchJsonObject(obj);
+					if (acc != null)
+					{
+						ExtensibleObject obj = objectTranslator.generateObject(
+								new AccountExtensibleObject(acc, getServer()), mapping);
 						if (obj != null) {
-							ExtensibleObject soffidObject = objectTranslator
-									.parseInputObject(obj, mapping);
-							if (soffidObject != null) {
-								List<Map<String, Object>> grantedRoles = (List<Map<String, Object>>) soffidObject
-										.get("grantedRoles");
-								if (grantedRoles != null) {
-									for (Map<String, Object> grantedRole : grantedRoles) {
-										RolGrant grant = vom
-												.parseGrant(grantedRole);
-										grants.add(grant);
+							obj = searchJsonObject(obj);
+							if (obj != null) {
+								ExtensibleObject soffidObject = objectTranslator
+										.parseInputObject(obj, mapping);
+								if (soffidObject != null) {
+									List<Map<String, Object>> grantedRoles = (List<Map<String, Object>>) soffidObject
+											.get("grantedRoles");
+									if (grantedRoles != null) {
+										for (Map<String, Object> grantedRole : grantedRoles) {
+											RolGrant grant = vom
+													.parseGrant(grantedRole);
+											grants.add(grant);
+										}
+										found = true;
 									}
-									found = true;
-								}
-								List<String> granted = (List<String>) soffidObject
-										.get("granted");
-								if (granted != null) {
-									for (String grantedRole : granted) {
-										RolGrant grant = new RolGrant();
-										grant.setDispatcher(getCodi());
-										grant.setRolName(grantedRole);
-										grant.setOwnerAccountName(accountName);
-										grant.setOwnerDispatcher(getCodi());
-										grants.add(grant);
+									List<String> granted = (List<String>) soffidObject
+											.get("granted");
+									if (granted != null) {
+										for (String grantedRole : granted) {
+											RolGrant grant = new RolGrant();
+											grant.setDispatcher(getCodi());
+											grant.setRolName(grantedRole);
+											grant.setOwnerAccountName(accountName);
+											grant.setOwnerDispatcher(getCodi());
+											grants.add(grant);
+										}
+										found = true;
 									}
-									found = true;
+	
 								}
-
 							}
 						}
 					}
@@ -506,7 +509,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 								
 								acc = vom.parseAccount( objectTranslator.parseInputObject(scimStoredObject, mapping));
 								if (acc != null)
+								{
+									if (debugEnabled)
+										log.info("Parsed account: "+acc.toString());
 									return acc;
+								}
 							}
 						}
 					} finally {
