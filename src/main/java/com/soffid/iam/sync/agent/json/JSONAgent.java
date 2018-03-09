@@ -256,7 +256,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						if (runTrigger(SoffidObjectTrigger.PRE_DELETE, object, targetObject, existingObject))
 						{
-							invoke (m, object);
+							invoke (m, targetObject);
 							runTrigger(SoffidObjectTrigger.POST_DELETE, object, targetObject, existingObject);
 						}
 					}
