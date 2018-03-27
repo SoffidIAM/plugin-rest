@@ -256,7 +256,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						if (runTrigger(SoffidObjectTrigger.PRE_DELETE, object, targetObject, existingObject))
 						{
-							invoke (m, object);
+							invoke (m, targetObject);
 							runTrigger(SoffidObjectTrigger.POST_DELETE, object, targetObject, existingObject);
 						}
 					}
@@ -794,6 +794,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		objectTranslator.setObjectFinder(new ExtensibleObjectFinder() {
 			
 			public ExtensibleObject find(ExtensibleObject pattern) throws Exception {
+				log.info("Searching for native object "+pattern.toString());
 				return searchJsonObject(pattern);
 			}
 		});
@@ -869,6 +870,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						log.info("Invoking GET on "+path);
 					Resource request = client.resource(path)
 							.accept(MediaType.APPLICATION_JSON);
+					addHeaders (request, m);
 					response = request.get();
 				} else {
 					Resource request = client.resource(path)
