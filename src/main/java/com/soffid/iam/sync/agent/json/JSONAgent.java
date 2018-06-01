@@ -466,7 +466,19 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							{
 								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
 								{
-									
+									ExtensibleObject grantObject = objectTranslator.parseInputObject(jsonObject, mapping);
+									if (grantObject != null)
+									{
+										if (debugEnabled)
+											debugObject("Parsed Soffid grant:", grantObject, "");
+										RolGrant grant = vom.parseGrant(grantObject);
+										if (grant != null)
+										{
+											if (debugEnabled)
+												log.info("Soffid grant: "+grant.toString());
+											grants.add(grant);
+										}
+									}
 								}
 							}
 						}
