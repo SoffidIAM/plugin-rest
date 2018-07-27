@@ -84,8 +84,9 @@
 									<include>org.apache.wink:wink-client-apache-httpclient</include>
 									<include>org.apache.wink:wink-json-provider</include>
 									<include>org.json:json</include>
-									<include>javax.ws.rs:jsr311-api</include>
-									<include>com.sun.xml.bind:jaxb-impl</include>
+<!--  									<include>javax.ws.rs:jsr311-api</include>
+ -->
+ 									<include>com.sun.xml.bind:jaxb-impl</include>
 									<include>com.sun.xml.bind:jaxb-api</include>
 									<include>javax.activation:activation</include>
 									<include>org.apache.geronimo.specs:geronimo-annotation_1.1_spec</include>

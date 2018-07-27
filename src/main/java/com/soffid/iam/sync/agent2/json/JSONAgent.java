@@ -37,7 +37,8 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 				{
 					ExtensibleObject target = objectTranslator.generateObject(sourceObject, map, true);
 					ExtensibleObject target2 = searchJsonObject(target);
-					return target2;						
+					if (target2 != null && !target2.isEmpty())
+						return target2;						
 				}
 			}
 			return null;
@@ -59,9 +60,12 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 					{
 						ExtensibleObject target = objectTranslator.generateObject(sourceObject, map, true);
 						ExtensibleObject target2 = searchJsonObject(target);
-						ExtensibleObject src2 = objectTranslator.parseInputObject(target2, map);
-						if (src2 != null)
-							return src2;
+						if (target2 != null && ! target2.isEmpty())
+						{
+							ExtensibleObject src2 = objectTranslator.parseInputObject(target2, map);
+							if (src2 != null)
+								return src2;
+						}
 					}
 				}
 			}

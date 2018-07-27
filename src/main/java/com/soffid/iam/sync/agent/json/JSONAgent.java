@@ -809,6 +809,42 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				log.info("Searching for native object "+pattern.toString());
 				return searchJsonObject(pattern);
 			}
+
+			public Collection<Map<String,Object>> invoke (String verb, String command, Map<String, Object> params) throws InternalErrorException
+			{
+				if (debugEnabled)
+				{
+					log.info ("Invoking: "+verb+" on "+command);
+				}
+
+				Resource resource = client
+						.resource(command)
+						.contentType(MediaType.APPLICATION_JSON)
+						.accept(MediaType.APPLICATION_JSON);
+				
+				JSONObject result = resource.invoke( verb, JSONObject.class,  
+						params == null ? null : new JSONObject(params));
+				
+				if (debugEnabled && result != null)
+				{
+					try {
+						log.info ("Result: "+result.toString(10));
+					} catch (JSONException e) {
+						log.info("Error displaying response: ", e);
+					}
+				}
+				
+				HashMap<String, Object> eo = new HashMap<String, Object>();
+				try {
+					json2map (result, eo);
+				} catch (JSONException e) {
+					throw new InternalErrorException("Error decoding response", e);
+				}
+				LinkedList<Map<String,Object>> r = new LinkedList<Map<String,Object>>();
+				r.add(eo);
+				return r;
+			}
+
 		});
 	}
 
