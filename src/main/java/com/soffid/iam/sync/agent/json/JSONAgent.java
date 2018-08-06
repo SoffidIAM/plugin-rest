@@ -928,6 +928,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					if ( "post".equalsIgnoreCase(m.method)) {
 						if (m.encoding == null)
 							m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
+						if (debugEnabled) log.info("object: "+object);
 						String params = encode(m, object);
 						
 						if (debugEnabled)
@@ -1141,17 +1142,53 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					}
 				}
 			} else {
-				for (String att: m.parameters)
-				{
-					if (object.getAttribute(att) != null)
-					{
-						hm.put(att, object.getAttribute(att));
+				for (String att: m.parameters) {
+					Object value = reviewObjectAndRemoveNulls(object.getAttribute(att));
+					if (value != null) {
+						hm.put(att, value);
 					}
 				}
+				if (debugEnabled) log.info("hm: "+hm);
 			}
 			return java2json(hm).toString();
 		} else {
 			throw new InternalErrorException("Encoding no soportado: "+m.encoding);
+		}
+	}
+
+	@SuppressWarnings("rawtypes")
+	private Object reviewObjectAndRemoveNulls(Object obj) {
+		if (debugEnabled) log.info(">>> obj: "+obj);
+		if (obj==null) {
+			return null;
+		} else if (obj instanceof Map) {
+			return reviewObjectAndRemoveNullsHashMap((HashMap) obj);
+		} else {
+			return obj;
+		}
+	}
+
+	@SuppressWarnings("rawtypes")
+	private Object reviewObjectAndRemoveNullsHashMap(HashMap hm) {
+		if (debugEnabled) log.info(">>> hm: "+hm);
+		HashMap newHm = (HashMap) hm.clone();
+		String EMPTY = null;
+		for (Object key: hm.keySet()) {
+			if (debugEnabled) log.info(">>> key: "+key);
+			Object value = hm.get(key);
+			if (debugEnabled) log.info(">>> value: "+value);
+			Object newValue = reviewObjectAndRemoveNulls(value);
+			if (debugEnabled) log.info(">>> newValue: "+newValue);
+			if (newValue==null || newValue.equals(EMPTY) || newValue.equals("null")) {
+				newHm.remove(key);
+				if (debugEnabled) log.info(">>>>>> remove from newHm the object: "+key);
+			}
+		}
+		if (debugEnabled) log.info(">>> newHm.size(): "+newHm.size());
+		if (!newHm.isEmpty()) {
+			return newHm;
+		} else {
+			return null;
 		}
 	}
 
