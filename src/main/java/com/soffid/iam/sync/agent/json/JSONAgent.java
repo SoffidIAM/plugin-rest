@@ -267,7 +267,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 		catch (Exception e)
 		{
-			String msg = "removing object : " + object.toString().substring(0, MAX_LOG) + " (log truncated) ...";
+			String error = (object.toString().length()>MAX_LOG) ? object.toString().substring(0, MAX_LOG) : object.toString();
+			String msg = "removing object : " + error + " (log truncated) ...";
 			log.warn(msg, e);
 			throw new InternalErrorException(msg, e);
 		}
@@ -1383,7 +1384,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 		catch (Exception e)
 		{
-			String msg = "updating object : " + targetObject.toString().substring(0, MAX_LOG) + " (log truncated) ...";
+			String error = (targetObject.toString().length()>MAX_LOG) ? targetObject.toString().substring(0, MAX_LOG) : targetObject.toString();
+			String msg = "updating object : " + error + " (log truncated) ...";
 			log.warn(msg, e);
 			throw new InternalErrorException(msg, e);
 		}
