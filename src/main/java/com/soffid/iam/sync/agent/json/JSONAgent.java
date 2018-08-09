@@ -774,7 +774,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		try {
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
-				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ACCOUNT))
+				if (mapping.getSoffidObject().toString().equals(object.getObjectType()))
 				{
 					if (objectTranslator.evalCondition(object, mapping))
 					{
