@@ -102,6 +102,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 
 	private RestClient client;
 
+	private static final int MAX_LOG = 1000;
+
 	/**
 	 * Constructor
 	 * 
@@ -265,7 +267,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 		catch (Exception e)
 		{
-			String msg = "removing object : " + object.toString();
+			String msg = "removing object : " + object.toString().substring(0, MAX_LOG) + " (log truncated) ...";
 			log.warn(msg, e);
 			throw new InternalErrorException(msg, e);
 		}
@@ -1381,7 +1383,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 		catch (Exception e)
 		{
-			String msg = "updating object : " + targetObject.toString();
+			String msg = "updating object : " + targetObject.toString().substring(0, MAX_LOG) + " (log truncated) ...";
 			log.warn(msg, e);
 			throw new InternalErrorException(msg, e);
 		}
@@ -1522,6 +1524,5 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		// TODO Auto-generated method stub
 		return null;
 	}
-
 }
 	
