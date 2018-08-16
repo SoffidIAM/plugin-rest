@@ -246,19 +246,16 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		{
 			debugObject("Removing object", object, "");
 			
-			for (ExtensibleObject targetObject: objectTranslator.generateObjects(object).getObjects())
+			ExtensibleObject existingObject = searchJsonObject(object);
+		
+			if (existingObject != null)
 			{
-				ExtensibleObject existingObject = searchJsonObject(targetObject);
-			
-				if (existingObject != null)
+				for (InvocationMethod m: getMethods(object.getObjectType(), "delete"))
 				{
-					for (InvocationMethod m: getMethods(targetObject.getObjectType(), "delete"))
+					if (runTrigger(SoffidObjectTrigger.PRE_DELETE, soffidObject, object, existingObject))
 					{
-						if (runTrigger(SoffidObjectTrigger.PRE_DELETE, object, targetObject, existingObject))
-						{
-							invoke (m, targetObject);
-							runTrigger(SoffidObjectTrigger.POST_DELETE, object, targetObject, existingObject);
-						}
+						invoke (m, object);
+						runTrigger(SoffidObjectTrigger.POST_DELETE, soffidObject, object, existingObject);
 					}
 				}
 			}
