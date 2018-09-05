@@ -10,7 +10,7 @@
 	<artifactId>rest-plugin</artifactId>
 	<packaging>jar</packaging>
 	<name>REST plugin</name>
-	<version>1.2.2-SNAPSHOT</version>
+	<version>1.2.2</version>
 	<dependencies>
 		<dependency>
 			<groupId>com.soffid.iam.sync</groupId>
@@ -89,7 +89,7 @@
 									<include>org.apache.wink:wink-client-apache-httpclient</include>
 									<include>org.apache.wink:wink-json-provider</include>
 									<include>org.json:json</include>
--  									<!--  include>javax.ws.rs:javax.ws.rs-api</include  -->
+-  									<!--  include>javax.ws.rs:javax.ws.rs-api</include -->
  									<include>com.sun.xml.bind:jaxb-impl</include>
 									<include>com.sun.xml.bind:jaxb-api</include>
 									<include>javax.activation:activation</include>
