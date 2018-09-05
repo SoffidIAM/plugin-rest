@@ -495,6 +495,105 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+
+	private void updateAccountGrants(String accountName) throws InternalErrorException {
+		try {
+			for (ExtensibleObjectMapping mapping: objectMappings)
+			{
+				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ALL_GRANTED_ROLES) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANTED_ROLE))
+				{
+					if (debugEnabled)
+						log.info("Using "+mapping.getSystemObject()+" mapping to update "+accountName+" roles");
+					Collection<RolGrant> grants = getServer().getAccountRoles(accountName, getCodi());
+					
+					RolGrant rg = new RolGrant();
+					rg.setDispatcher(getCodi());
+					rg.setOwnerAccountName(accountName);
+					rg.setOwnerDispatcher(getCodi());
+					GrantExtensibleObject geo = new GrantExtensibleObject(rg, getServer());
+					String condition = mapping.getCondition();
+					try {
+						mapping.setCondition(null);
+						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
+						if (jsonObj != null)
+						{
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							if (jsonStoredObjects != null)
+							{
+								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
+								{
+									ExtensibleObject grantObject = objectTranslator.parseInputObject(jsonObject, mapping);
+									if (grantObject != null)
+									{
+										RolGrant grant = vom.parseGrant(grantObject);
+										
+										if (grant != null)
+										{
+											boolean found = false;
+											for (RolGrant grant2: grants)
+											{
+												if (grant2.getRolName() .equals(grant.getRolName()))
+												{
+													if (grant.getDomainValue() == null ||
+															grant.getDomainValue().equals(grant2.getDomainValue()))
+													{
+														found = true;
+														grants.remove(grant2);
+														break;
+													}
+												}
+											}
+											if (! found)
+											{
+												if (debugEnabled)
+												{
+													log.info("Removing grant "+grantObject);
+												}
+												for (InvocationMethod m: getMethods(jsonObject.getObjectType(), "delete"))
+												{
+													if (runTrigger(SoffidObjectTrigger.PRE_DELETE, grantObject, jsonObject, jsonObject))
+													{
+														invoke (m, jsonObject);
+														runTrigger(SoffidObjectTrigger.POST_DELETE, grantObject, jsonObject, jsonObject);
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+							if (debugEnabled)
+								log.info("Adding new grants");
+							for (RolGrant grant: grants)
+							{
+								grant.setOwnerAccountName(accountName);
+								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
+								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
+								for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
+								{
+									if (runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject, targetObject, null))
+									{
+										invoke (m, targetObject);
+										runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+									}
+								}
+							}
+						}
+					} finally {
+						mapping.setCondition(condition);
+					}
+				}
+			}
+		} catch (JSONException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		} catch (UnsupportedEncodingException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		}
+	}
+
+
 	public Account getAccountInfo(String accountName) throws RemoteException,
 			InternalErrorException {
 		try {
@@ -711,6 +810,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						removeScimUser(acc.getName());
 					}
+					updateAccountGrants(acc.getName());
 				}
 			}
 		}
@@ -974,7 +1074,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					return null;
 				}
 				if (response.getStatusCode() != HttpStatus.OK.getCode() &&
-						response.getStatusCode() != HttpStatus.CREATED.getCode())
+						response.getStatusCode() != HttpStatus.CREATED.getCode() &&
+						response.getStatusCode() != HttpStatus.NO_CONTENT.getCode())
 				{
 					String text = response.getEntity(String.class);
 					if (debugEnabled)
@@ -985,79 +1086,87 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					throw new RuntimeException("Error on invocation "+response.getMessage()+"\n"+text);
 				}
 		
-				String txt = response.getEntity(String.class);
-				ExtensibleObject resp = new ExtensibleObject();
-				resp.setObjectType(object.getObjectType());
-				if (txt.startsWith("{"))
-				{
-					JSONObject respOb  = new JSONObject(txt);
-					Map<String, Object> map = new HashMap<String, Object>();
-					json2map(respOb, map );
-					resp.putAll(map);
-				} else if (txt.startsWith("[")) {
-					JSONArray respOb  = new JSONArray(txt);
-					Map<String, Object> map = new HashMap<String, Object>();
-					map.put("result", json2java(respOb));
-					resp.putAll(map);
-					if (m.results == null) 
-						m.results = "result";
-				} else if (! txt.isEmpty()) {
-					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+txt);
-				}
-				
-				if (debugEnabled)
-				{
-					debugObject("Received from "+path, resp, "  ");
-				}
-				
-				if (m.check != null && !m.check.isEmpty())
-				{
-					objectTranslator.eval(m.check, resp);
-				}
-			
-				if (m.results != null)
+				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
 				{
 					if (debugEnabled)
-						log.info("Parsing results");
-					Object result = objectTranslator.eval(m.results, resp);
-					if (result instanceof Collection)
+						log.info("No content received");
+				}
+				else
+				{
+					String txt = response.getEntity(String.class);
+					ExtensibleObject resp = new ExtensibleObject();
+					resp.setObjectType(object.getObjectType());
+					if (txt.startsWith("{"))
 					{
-						for (Object o: ((Collection) result))
+						JSONObject respOb  = new JSONObject(txt);
+						Map<String, Object> map = new HashMap<String, Object>();
+						json2map(respOb, map );
+						resp.putAll(map);
+					} else if (txt.startsWith("[")) {
+						JSONArray respOb  = new JSONArray(txt);
+						Map<String, Object> map = new HashMap<String, Object>();
+						map.put("result", json2java(respOb));
+						resp.putAll(map);
+						if (m.results == null) 
+							m.results = "result";
+					} else if (! txt.isEmpty()) {
+						throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+txt);
+					}
+					
+					if (debugEnabled)
+					{
+						debugObject("Received from "+path, resp, "  ");
+					}
+					
+					if (m.check != null && !m.check.isEmpty())
+					{
+						objectTranslator.eval(m.check, resp);
+					}
+				
+					if (m.results != null)
+					{
+						if (debugEnabled)
+							log.info("Parsing results");
+						Object result = objectTranslator.eval(m.results, resp);
+						if (result instanceof Collection)
+						{
+							for (Object o: ((Collection) result))
+							{
+								ExtensibleObject eo = new ExtensibleObject();
+								eo.setObjectType(object.getObjectType());
+								if (o instanceof Map)
+									eo.putAll((Map<? extends String, ? extends Object>) o);
+								else
+									eo.put("result", o);
+								if (debugEnabled)
+									debugObject("Parsed object:", eo, "  ");
+								eos.getObjects().add(eo);
+							}
+						}
+						else
 						{
 							ExtensibleObject eo = new ExtensibleObject();
 							eo.setObjectType(object.getObjectType());
-							if (o instanceof Map)
-								eo.putAll((Map<? extends String, ? extends Object>) o);
-							else
-								eo.put("result", o);
 							if (debugEnabled)
 								debugObject("Parsed object:", eo, "  ");
 							eos.getObjects().add(eo);
 						}
+		
+						if (m.next != null && !m.next.isEmpty())
+						{
+							path = (String) objectTranslator.eval(m.next, resp);
+							if (path != null)
+							{
+								log.info("Jumping to next page: "+path);
+								repeat = true;
+								addParams = false;
+							}
+						}
 					}
 					else
 					{
-						ExtensibleObject eo = new ExtensibleObject();
-						eo.setObjectType(object.getObjectType());
-						if (debugEnabled)
-							debugObject("Parsed object:", eo, "  ");
-						eos.getObjects().add(eo);
+						eos.getObjects().add(resp);
 					}
-	
-					if (m.next != null && !m.next.isEmpty())
-					{
-						path = (String) objectTranslator.eval(m.next, resp);
-						if (path != null)
-						{
-							log.info("Jumping to next page: "+path);
-							repeat = true;
-							addParams = false;
-						}
-					}
-				}
-				else
-				{
-					eos.getObjects().add(resp);
 				}
 			} catch (ClientWebException e) {
 				createClient();
@@ -1152,7 +1261,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			}
 			return java2json(hm).toString();
 		} else {
-			throw new InternalErrorException("Encoding no soportado: "+m.encoding);
+			throw new InternalErrorException("Not supported encoding: "+m.encoding);
 		}
 	}
 
@@ -1484,25 +1593,28 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		{
 			if (oldObject == null || oldObject.getObjectType().equals(eom.getSystemObject()))
 			{
-				for ( ObjectMappingTrigger trigger: eom.getTriggers())
+				if (newObject == null || newObject.getObjectType().equals(eom.getSystemObject()))
 				{
-					if (trigger.getTrigger().equals (triggerType))
+					for ( ObjectMappingTrigger trigger: eom.getTriggers())
 					{
-						ExtensibleObject eo = new ExtensibleObject();
-						eo.setAttribute("source", soffidObject);
-						eo.setAttribute("newObject", newObject);
-						eo.setAttribute("oldObject", oldObject);
-						if ( ! objectTranslator.evalExpression(eo, trigger.getScript()) )
+						if (trigger.getTrigger().equals (triggerType))
 						{
-							log.info("Trigger "+triggerType+" returned false");
-							if (debugEnabled)
+							ExtensibleObject eo = new ExtensibleObject();
+							eo.setAttribute("source", soffidObject);
+							eo.setAttribute("newObject", newObject);
+							eo.setAttribute("oldObject", oldObject);
+							if ( ! objectTranslator.evalExpression(eo, trigger.getScript()) )
 							{
-								if (oldObject != null)
-									debugObject("old object", oldObject, "  ");
-								if (newObject != null)
-									debugObject("new object", newObject, "  ");
+								log.info("Trigger "+triggerType+" returned false");
+								if (debugEnabled)
+								{
+									if (oldObject != null)
+										debugObject("old object", oldObject, "  ");
+									if (newObject != null)
+										debugObject("new object", newObject, "  ");
+								}
+								return false;
 							}
-							return false;
 						}
 					}
 				}
