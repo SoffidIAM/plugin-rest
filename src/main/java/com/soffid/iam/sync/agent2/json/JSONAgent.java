@@ -43,7 +43,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 			}
 			return null;
 		} catch (Exception e) {
-			throw new InternalErrorException("Error searching for LDAP object", e);
+			throw new InternalErrorException("Error searching for native object", e);
 		}
 	}
 
@@ -71,7 +71,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 			}
 			return null;
 		} catch (Exception e) {
-			throw new InternalErrorException("Error searching for LDAP object", e);
+			throw new InternalErrorException("Error searching for native object", e);
 		}
 	}
 

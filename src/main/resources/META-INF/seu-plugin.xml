@@ -6,7 +6,7 @@
 	<name>REST Web service plugin</name>
 	<version>${pom.version}</version>
 	<agent>
-		<name>JSON Rest webservice</name>
+		<name>JSON/XML/SOAP Rest webservice</name>
 		<javaClass>com.soffid.iam.sync.agent.json.JSONAgent</javaClass>
 		<javaClassV2>com.soffid.iam.sync.agent2.json.JSONAgent</javaClassV2>
 		<userInterface>JSONAgent.zul</userInterface>

@@ -4,71 +4,238 @@
 <?component name="input_etiqueta" macro-uri="comu/input_etiqueta.zul"?>
 <?component name="input_password" macro-uri="comu/input_password.zul"?>
 
-<grid width="99%">
-	<columns visible="false"><column width="14%"/><column/> </columns>
-	<rows>
-		<row>
-			<input_etiqueta value="Server URL" />
-			<hbox width="90%">
-				<input_dada bind="@param4" lectura="${!canModifyAgent}"
-					width_custom="98%" />
-			</hbox>
-		</row>
-		<row>
-			<input_etiqueta value="User name" />
-			<hbox width="90%">
-				<input_dada bind="@param0" lectura="${!canModifyAgent}"
-					width_custom="98%" />
-			</hbox>
-		</row>
-		<row>
-			<input_etiqueta value="Password" />
-			<hbox width="90%">
-				<input_password bind="@param1" lectura="${!canModifyAgent}"
-					width_custom="98%" />
-			</hbox>
-		</row>
-		<row>
-			<input_etiqueta value="Authentication method" />
-			<listbox bind="@param2" mold="select"  disabled="{!canModifyAgent}" width="100px">
-				<attribute name="onSelect">
-				<![CDATA[
-					authurlrow.setVisible ( self.getSelectedItem() != null && "token".equals(self.getSelectedItem().getValue()) );
+<div id="xmlAgentTop">
+	<grid width="99%">
+		<attribute name='onCreate'>
+		<![CDATA[
+	    try {
+	    	updateGrid ();
+	    } catch (Exception e) {
+	    	
+	    }
+		]]>
+		</attribute>
+		<zscript><![CDATA[
+			org.zkoss.zk.ui.event.EventListener editTemplate = new EventListener ()
+			{
+				public void onEvent(Event ev) {
+					row = ev.getTarget().getParent().getParent();
+					template = row.getAttribute("template");
+					Object editor = edw.getFellow("editor");
+					editor.value = template;
+					pageScope.put("xmlCurrentRow", row);
+		     		edw.doHighlighted();
+				}
+			};
+	
+			org.zkoss.zk.ui.event.EventListener removeTemplate = new EventListener ()
+			{
+				public void onEvent(Event ev) {
+					ev.getTarget().getParent().getParent().detach();
+					updateBlob();
+				}
+			};
+	
+			void updateGrid () {
+				byte[] data = es.caib.zkib.datasource.XPathUtils.getValue( xmlAgentTop ,"blobParam");
+				if (data != null)
+				{
+					String t = new String ( data,"UTF-8"); 
+					org.json.JSONTokener tokener = new org.json.JSONTokener( t);
+					org.json.JSONObject json = new org.json.JSONObject(tokener);
+					org.json.JSONArray templates = json.optJSONArray("templates");
+					Grid g = xmlTemplates;
+					if (templates != null)
+					{
+						for ( int i = 0; i < templates.length(); i++)
+						{
+							org.json.JSONObject s = templates.getJSONObject(i);
+							if (s.optString("name") != null && !s.optString("name").isEmpty() &&
+								s.optString("template") != null && !s.optString("template").isEmpty())
+							{
+								Row row = new Row();
+								row.setAttribute("template", s.optString("template"));
+								g.getRows().appendChild(row);
+								Div div = new Div();
+								row.appendChild(div);
+								Textbox tb = new Textbox();
+								tb.setWidth("200px");
+								tb.setValue (s.optString("name"));
+								div.appendChild(tb);
+								es.caib.zkib.zkiblaf.ImageClic ic = new es.caib.zkib.zkiblaf.ImageClic("/img/pencil.png"); 
+								ic.addEventListener("onClick", editTemplate);
+								div.appendChild(ic);
+								ic = new es.caib.zkib.zkiblaf.ImageClic("~./img/list-remove.gif");
+								ic.addEventListener("onClick", removeTemplate);
+								div.appendChild(ic);
+							}
+						}
+					}
+				}
+		    }
+			void updateBlob () {
+				byte[] data = es.caib.zkib.datasource.XPathUtils.getValue(xmlAgentTop,"blobParam");
+				org.json.JSONObject json;
+				if (data != null)
+				{
+					String t = new String ( data,"UTF-8"); 
+					org.json.JSONTokener tokener = new org.json.JSONTokener( t);
+					json = new org.json.JSONObject(tokener);
+				} else {
+					json = new org.json.JSONObject();
+				}
+				org.json.JSONArray templates = new org.json.JSONArray();
+				Grid g = xmlTemplates;
+				for ( Component row: g.getRows().getChildren())
+				{
+					String template = row.getAttribute("template");
+					String templateName = row.getFirstChild().getFirstChild().getValue();
+					org.json.JSONObject ob = new org.json.JSONObject();
+					ob.put("template", template);
+					ob.put("name", templateName);
+					templates.put(ob);
+				}
+				json.put("templates", templates); 
+				String t = json.toString();
+				es.caib.zkib.datasource.XPathUtils.setValue(self,"blobParam", t.getBytes("UTF-8"));
+			}
+			
+			void newTemplate() {
+				Grid g = xmlTemplates;
+				Row row = new Row();
+				row.setAttribute("template", "<?xml version='1.0' encoding='UTF-8'?>\n"+
+					"<xsl:stylesheet version='1.0'\n"+
+					"  xmlns:xsl='http://www.w3.org/1999/XSL/Transform'>\n"+
+					"    <xsl:template match='/request'>\n"+
+					"      <soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n"+
+					"        <soapenv:Header/>\n"+
+					"        <soapenv:Body>\n"+
+					"           <wsdl:actualRequest xmlns:wsdl='http://iam.soffid.com/wsdl'>\n"+
+					"             <value-of select='param1'/>\n"+
+					"           </wsdl:actualRequest>\n"+
+					"        </soapenv:Body>\n"+
+					"    </xsl:template>\n"+
+					"</xsl:stylesheet>");
+				g.getRows().appendChild(row);
+				Div div = new Div();
+				row.appendChild(div);
+				Textbox tb = new Textbox();
+				tb.setAttribute("onChange", "updateBlob()");
+				tb.setWidth("200px");
+				tb.setValue ("");
+				tb.focus();
+				div.appendChild(tb);
+				es.caib.zkib.zkiblaf.ImageClic ic = new es.caib.zkib.zkiblaf.ImageClic("/img/pencil.png"); 
+				ic.addEventListener("onClick", editTemplate);
+				div.appendChild (ic);
+				ic = new es.caib.zkib.zkiblaf.ImageClic("~./img/list-remove.gif");
+				ic.addEventListener("onClick", removeTemplate);
+				div.appendChild (ic);
+			}
+		]]>
+		</zscript>
+		<columns visible="false"><column width="14%"/><column/> </columns>
+		<rows>
+			<row>
+				<input_etiqueta value="Server URL" />
+				<hbox width="90%">
+					<input_dada bind="@param4" lectura="${!canModifyAgent}"
+						width_custom="98%" />
+				</hbox>
+			</row>
+			<row>
+				<input_etiqueta value="User name" />
+				<hbox width="90%">
+					<input_dada bind="@param0" lectura="${!canModifyAgent}"
+						width_custom="98%" />
+				</hbox>
+			</row>
+			<row>
+				<input_etiqueta value="Password" />
+				<hbox width="90%">
+					<input_password bind="@param1" lectura="${!canModifyAgent}"
+						width_custom="98%" />
+				</hbox>
+			</row>
+			<row>
+				<input_etiqueta value="Authentication method" />
+				<listbox bind="@param2" mold="select"  disabled="{!canModifyAgent}" width="100px">
+					<attribute name="onSelect">
+					<![CDATA[
+						authurlrow.setVisible ( self.getSelectedItem() != null && "token".equals(self.getSelectedItem().getValue()) );
+					]]>
+					</attribute>
+					<attribute name="onCreate">
+					<![CDATA[
+						authurlrow.setVisible (  self.getSelectedItem() != null && "token".equals(self.getSelectedItem().getValue()) );
+					]]>
+					</attribute>
+					<listitem value="">
+						<listcell label="None"/>
+					</listitem>
+					<listitem value="basic">
+						<listcell label="Basic"/>
+					</listitem>
+					<listitem value="token">
+						<listcell label="Token"/>
+					</listitem>
+				</listbox>
+			</row>
+			<row id="authurlrow">
+				<input_etiqueta value="Authentication URL" />
+				<hbox width="90%">
+					<input_dada bind="@param3" lectura="${!canModifyAgent}"
+						width_custom="98%" />
+				</hbox>
+			</row>
+			<row>
+				<input_etiqueta value="Enable debug" />
+				<listbox bind="@param8" mold="select"  disabled="{!canModifyAgent}" width="100px">
+					<listitem value="false">
+						<listcell label="No"/>
+					</listitem>
+					<listitem value="true">
+						<listcell label="Yes"/>
+					</listitem>
+				</listbox>
+			</row>
+			<row>
+				<input_etiqueta value="XML Templates" />
+				<grid id="xmlTemplates">
+					<columns>
+						<column label="name"></column>
+						<column label="-"></column>
+					</columns>
+					<rows></rows>
+				</grid>
+				<button label="New template" onClick="newTemplate()">
+				</button>
+			</row>
+		</rows>
+	</grid>
+	<window closable="true" id="edw" position="center, center" onCancel="" title="${c:l('editorJS.Titol')}" visible="false" width="90%">
+		<attribute name="onClose">
+			event.stopPropagation ();
+			edw.setVisible(false);
+		</attribute>
+
+		<codemirror value="" id="editor" linenumbers="true"
+		height="40em"
+		language="xml"
+		width="100%"/>
+
+		<separator spacing="5px"/>
+		<div align="right">
+			<button id="finishButton" label="${c:l('editorJS.zul.Accepta')}">
+				<attribute name="onClick"><![CDATA[
+					Row r = pageScope.get("xmlCurrentRow");
+					r.setAttribute("template", editor.getValue());
+					updateBlob();
+					edw.setVisible(false);
 				]]>
 				</attribute>
-				<attribute name="onCreate">
-				<![CDATA[
-					authurlrow.setVisible (  self.getSelectedItem() != null && "token".equals(self.getSelectedItem().getValue()) );
-				]]>
-				</attribute>
-				<listitem value="">
-					<listcell label="None"/>
-				</listitem>
-				<listitem value="basic">
-					<listcell label="Basic"/>
-				</listitem>
-				<listitem value="token">
-					<listcell label="Token"/>
-				</listitem>
-			</listbox>
-		</row>
-		<row id="authurlrow">
-			<input_etiqueta value="Authentication URL" />
-			<hbox width="90%">
-				<input_dada bind="@param3" lectura="${!canModifyAgent}"
-					width_custom="98%" />
-			</hbox>
-		</row>
-		<row>
-			<input_etiqueta value="Enable debug" />
-			<listbox bind="@param8" mold="select"  disabled="{!canModifyAgent}" width="100px">
-				<listitem value="false">
-					<listcell label="No"/>
-				</listitem>
-				<listitem value="true">
-					<listcell label="Yes"/>
-				</listitem>
-			</listbox>
-		</row>
-	</rows>
-</grid>
+			</button>
+			<button label="${c:l('editorJS.zul.Cancel·la')}" onClick="edv.setVisible(false)"/>
+		</div>								
+	</window>
+</div>
