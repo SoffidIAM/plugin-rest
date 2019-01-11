@@ -150,7 +150,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 						mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GROUP)
 						)
 				{
-					for (InvocationMethod m: getMethods(mapping.getSystemObject(), "select"))
+					for (InvocationMethod m: getMethods(mapping.getSystemObject(), "load"))
 					{
 						ExtensibleObject object = new ExtensibleObject();
 						object.setObjectType(mapping.getSystemObject().toString());
