@@ -1,6 +1,5 @@
 package com.soffid.iam.sync.agent.json;
 
-import java.util.LinkedList;
 import java.util.List;
 
 public class InvocationMethod
@@ -14,6 +13,8 @@ public class InvocationMethod
 	public String next;
 	public String template;
 	public String condition;
+	public String notFound;
+	public String avoid;
 	public String[] parameters;
 	public List<String[]> headers;
 }

@@ -1087,11 +1087,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			{
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_ROLE))
 				{
-					ExtensibleObject eo = new ExtensibleObject();
-					eo.setObjectType(mapping.getSystemObject());
-					
+					ExtensibleObject s = new ExtensibleObject();
+					s.setObjectType(mapping.getSoffidObject().toString());
+					ExtensibleObject eo = objectTranslator.generateObject(s, mapping, true);
+
 					ExtensibleObjects objects = loadJsonObjects(eo, null);
 					
+					if (objects == null)
+						throw new InternalErrorException("No roles found");
 					for ( ExtensibleObject object : objects.getObjects())
 					{
 						String name = vom.toSingleString(objectTranslator.parseInputAttribute("name", object, mapping));
@@ -1373,6 +1376,18 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	{
 		for (InvocationMethod m: getMethods(object.getObjectType(), "select"))
 		{
+			// PATCH TO AVOID FAILING THE SELECT WHEN THERE IS NO REQUEST TO RECOVER A ROLE
+			// For reconciliations that only have one method to retrieve the name of the roles
+			if (m.avoid!=null && "true".equals(m.avoid)) {
+				ExtensibleObject eo = new ExtensibleObject();
+				eo.setObjectType(object.getObjectType());
+				eo.put("result", object.getAttribute("RoleName"));
+				ExtensibleObjects eos = new ExtensibleObjects();
+				eos.getObjects().add(eo);
+				if (debug) log.info("m.avoid = "+m.avoid+", se creará el role: "+object.getAttribute("RoleName"));
+				return eos;
+			}
+
 			ExtensibleObjects objects = invoke (m, object, source);
 			if (objects != null && objects.getObjects().size() > 0)
 			{
@@ -1477,8 +1492,36 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response = request.invoke(m.method, ClientResponse.class, params);
 					}
 				}
-		 
-				
+
+				//
+				// We manage the patch to look for the false notFound
+				// When the webservice returns HTTP 200 with a data error instead of HTTP 404
+				//
+				if (debug) log.info("m.notFound: "+m.notFound);
+				if (m.notFound != null) {
+					if (debug) log.info("Existe el property *NotFound, comprobamos primero si la respuesta es un 'falso' NotFound");
+					try {
+						String mimeType = response.getHeaders().getFirst("Content-Type");
+						ExtensibleObject resp = new ExtensibleObject();
+						resp.setObjectType(object.getObjectType());
+						if (mimeType.contains("json")) {
+							String txt = response.getEntity(String.class);
+							parseJsonObject(m, path, txt, resp);
+						} else if (mimeType.contains("xml")){
+							byte[] r = response.getEntity(byte[].class);
+							parseXmlObject(m, path, r, resp);
+						} else {
+							throw new InternalErrorException("Unexpected response type "+mimeType);
+						}
+						Object result = objectTranslator.eval(m.notFound, resp);
+						if (debug) log.info("Respuensta encontrada, es un falso 'NotFound', devolvemos null. Result: "+result);
+						response.consumeContent();
+						return null;
+					} catch (Exception e) {
+						if (debug) log.info("No se ha encontrado el mensaje de la respuesta, no hacemos nada, no podemos confirmar que sea un 'falso' NotFound. Exception e: "+e.getMessage());
+					}
+				}
+
 				if (response.getStatusCode() == HttpStatus.NOT_FOUND.getCode())
 				{
 					response.consumeContent();
@@ -1489,12 +1532,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response.getStatusCode() != HttpStatus.NO_CONTENT.getCode())
 				{
 					String text = response.getEntity(String.class);
-					if (debug)
-					{
-						log.info("ERROR "+response.getMessage()+": \n"+text);
-					}
-	
-					throw new RuntimeException("Error on invocation "+response.getMessage()+"\n"+text);
+					if (debug)log.info("ERROR "+response.getMessage()+": \n"+text);
+					throw new InternalErrorException(new String("Error on invocation "+response.getMessage()+"\n"+text).substring(0, 800));
 				}
 		
 				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
@@ -1805,8 +1844,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						hm.put(att, value);
 					}
 				}
-				if (debug) log.info("hm: "+hm);
 			}
+			if (debug) log.info("hm: "+hm);
+			if (hm.isEmpty())
+				return null;
 			return java2json(hm).toString();
 		} else {
 			throw new InternalErrorException("Not supported encoding: "+m.encoding);
@@ -1950,7 +1991,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						Element e = root.getOwnerDocument().createElement(k);
 						root.appendChild(e);
-						fillXmlData (e, value);
+						fillXmlData (e, v);
 					}
 				}
 				else if (value.getClass().isArray())
@@ -1960,7 +2001,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						Element e = root.getOwnerDocument().createElement(k);
 						root.appendChild(e);
-						fillXmlData (e, value);
+						fillXmlData (e, v);
 					}
 				}
 				else
@@ -2142,6 +2183,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.parameters = mapping.getProperties().get(k).split("[, ]+");
 				else if (tag.equalsIgnoreCase("Template"))
 					im.template = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("NotFound"))
+					im.notFound = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("Avoid"))
+					im.avoid = mapping.getProperties().get(k);
 				else if (tag.toLowerCase().startsWith("header"))
 				{
 					String v = mapping.getProperties().get(k);
