@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -55,6 +56,7 @@ import es.caib.seycon.ng.comu.SoffidObjectTrigger;
 import es.caib.seycon.ng.comu.SoffidObjectType;
 import es.caib.seycon.ng.comu.Usuari;
 import es.caib.seycon.ng.exception.InternalErrorException;
+import es.caib.seycon.ng.exception.UnknownRoleException;
 import es.caib.seycon.ng.exception.UnknownUserException;
 import es.caib.seycon.ng.sync.agent.Agent;
 import es.caib.seycon.ng.sync.engine.extobj.AccountExtensibleObject;
@@ -121,6 +123,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	protected RestClient client;
 
 	private static final int MAX_LOG = 1000;
+	
+	boolean grantsInRole = false;
+	
+	Map<String,Set<String>> userRoles = new HashMap<String, Set<String>>();
 
 	/**
 	 * Constructor
@@ -339,6 +345,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						{
 							removeRole(rol.getNom(), rol.getBaseDeDades());
 						}
+						if (rol.getId() != null)
+							updateRoleGrants(rol.getNom(), rol.getId());
 					}
 				}
 			}
@@ -425,8 +433,117 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		if (!tryGrantFetch (accountName, grants))
 			tryAccountFetch (accountName, grants);
 		
+		log.info("Getting user roles from group mapping");
+		Set<String> r = userRoles.get(accountName);
+		
+		if (r != null)
+		{
+			for (String roleName: r)
+			{
+				log.info("Inspecting role "+roleName);
+				if (roleName != null && ! roleName.isEmpty())
+				{
+					RolGrant rg = new RolGrant();
+					rg.setDispatcher(getCodi());
+					rg.setRolName(roleName);
+					rg.setOwnerAccountName(accountName);
+					rg.setOwnerDispatcher(getCodi());
+					grants.add(rg);
+				}
+			}
+		}
 		
 		return grants;
+	}
+
+	private boolean tryRoleFetch(String roleName, List<RolGrant> grants) throws InternalErrorException {
+		try {
+			boolean found = false;
+			for (ExtensibleObjectMapping mapping : objectMappings) {
+				if (mapping.getSoffidObject().equals(
+						SoffidObjectType.OBJECT_ROLE)) {
+					Rol rol2 = null;
+					try {
+						rol2 = getServer().getRoleInfo(roleName, getCodi());
+					} catch (UnknownRoleException e) {
+					}
+					if (rol2 == null)
+					{
+						rol2 = new Rol();
+						rol2.setNom(roleName);
+						rol2.setBaseDeDades(getCodi());
+					}
+					ExtensibleObject obj = objectTranslator.generateObject(
+							new RoleExtensibleObject(rol2, getServer()), mapping);
+					if (obj != null) {
+						obj = searchJsonObject(obj);
+						if (obj != null) {
+							ExtensibleObject soffidObject = objectTranslator
+									.parseInputObject(obj, mapping);
+							if (soffidObject != null) {
+								List<Map<String, Object>> grantedAccounts = (List<Map<String, Object>>) soffidObject
+										.get("grantedAccounts");
+								if (grantedAccounts != null) {
+									for (Map<String, Object> grantedAccount: grantedAccounts) {
+										RolGrant grant = new RolGrant();
+										grant.setDispatcher(getCodi());
+										grant.setRolName(roleName);
+										grant.setOwnerAccountName((String) grantedAccount.get("accountName"));
+										grant.setOwnerDispatcher(getCodi());
+										grants.add(grant);
+									}
+									found = true;
+								}
+								List<Map<String, Object>> allGrantedAccounts = (List<Map<String, Object>>) soffidObject
+										.get("allGrantedAccounts");
+								if (grantedAccounts != null) {
+									for (Map<String, Object> grantedAccount: grantedAccounts) {
+										RolGrant grant = new RolGrant();
+										grant.setDispatcher(getCodi());
+										grant.setRolName(roleName);
+										grant.setOwnerAccountName((String) grantedAccount.get("accountName"));
+										grant.setOwnerDispatcher(getCodi());
+										grants.add(grant);
+									}
+									found = true;
+								}
+								List<String> granted = (List<String>) soffidObject
+										.get("grantedAccountNames");
+								if (granted != null) {
+									for (String grantedAccount : granted) {
+										RolGrant grant = new RolGrant();
+										grant.setDispatcher(getCodi());
+										grant.setRolName(roleName);
+										grant.setOwnerAccountName((String) grantedAccount);
+										grant.setOwnerDispatcher(getCodi());
+										grants.add(grant);
+									}
+									found = true;
+								}
+								granted = (List<String>) soffidObject
+										.get("allGrantedAccountNames");
+								if (granted != null) {
+									for (String grantedAccount : granted) {
+										RolGrant grant = new RolGrant();
+										grant.setDispatcher(getCodi());
+										grant.setRolName(roleName);
+										grant.setOwnerAccountName((String) grantedAccount);
+										grant.setOwnerDispatcher(getCodi());
+										grants.add(grant);
+									}
+									found = true;
+								}
+							}
+						}
+					}
+				}
+			}
+			return found;
+		} catch (JSONException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		} catch (UnsupportedEncodingException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		}
 	}
 
 	private boolean tryAccountFetch(String accountName, List<RolGrant> grants) throws InternalErrorException {
@@ -485,19 +602,23 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
-	private boolean tryGrantFetch(String accountName, List<RolGrant> grants) throws InternalErrorException {
+	private boolean tryGrantByGroupFetch(String roleName, List<RolGrant> grants) throws InternalErrorException {
 		try {
 			boolean found = false;
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
-				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT))
+				String prop = mapping.getProperties().get("drivenByRole");
+				if ( prop != null &&
+						(mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ALL_GRANTED_ROLES) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANTED_ROLE)))
 				{
 					found = true;
 					
 					RolGrant rg = new RolGrant();
 					rg.setDispatcher(getCodi());
-					rg.setOwnerAccountName(accountName);
-					rg.setOwnerDispatcher(accountName);
+					rg.setRolName(roleName);
+					rg.setOwnerDispatcher(getCodi());
 					GrantExtensibleObject geo = new GrantExtensibleObject(rg, getServer());
 					String condition = mapping.getCondition();
 					try {
@@ -510,6 +631,66 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							{
 								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
 								{
+									jsonObject.setObjectType(mapping.getSystemObject());
+									ExtensibleObject grantObject = objectTranslator.parseInputObject(jsonObject, mapping);
+									if (grantObject != null)
+									{
+										if (debug)
+											debugObject("Parsed Soffid grant:", grantObject, "");
+										RolGrant grant = vom.parseGrant(grantObject);
+										if (grant != null)
+										{
+											if (debug)
+												log.info("Soffid grant: "+grant.toString());
+											grants.add(grant);
+										}
+									}
+								}
+							}
+						}
+					} finally {
+						mapping.setCondition(condition);
+					}
+				}
+			}
+			return found;
+		} catch (JSONException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		} catch (UnsupportedEncodingException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		}
+	}
+
+	private boolean tryGrantFetch(String accountName, List<RolGrant> grants) throws InternalErrorException {
+		try {
+			boolean found = false;
+			for (ExtensibleObjectMapping mapping: objectMappings)
+			{
+				String prop = mapping.getProperties().get("drivenByRole");
+				if ( prop == null &&
+						(mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ALL_GRANTED_ROLES) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANTED_ROLE)))
+				{
+					found = true;
+					
+					RolGrant rg = new RolGrant();
+					rg.setDispatcher(getCodi());
+					rg.setOwnerAccountName(accountName);
+					rg.setOwnerDispatcher(getCodi());
+					GrantExtensibleObject geo = new GrantExtensibleObject(rg, getServer());
+					String condition = mapping.getCondition();
+					try {
+						mapping.setCondition(null);
+						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
+						if (jsonObj != null)
+						{
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							if (jsonStoredObjects != null)
+							{
+								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
+								{
+									jsonObject.setObjectType(mapping.getSystemObject());
 									ExtensibleObject grantObject = objectTranslator.parseInputObject(jsonObject, mapping);
 									if (grantObject != null)
 									{
@@ -544,9 +725,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		try {
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
-				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT) ||
+				String prop = mapping.getProperties().get("drivenByRole");
+				if (prop == null && (
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT) ||
 						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ALL_GRANTED_ROLES) ||
-						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANTED_ROLE))
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANTED_ROLE)))
 				{
 					if (debug)
 						log.info("Using "+mapping.getSystemObject()+" mapping to update "+accountName+" roles");
@@ -557,6 +740,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					rg.setOwnerAccountName(accountName);
 					rg.setOwnerDispatcher(getCodi());
 					GrantExtensibleObject geo = new GrantExtensibleObject(rg, getServer());
+					geo.setObjectType(mapping.getSoffidObject().toString());
 					String condition = mapping.getCondition();
 					try {
 						mapping.setCondition(null);
@@ -576,7 +760,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 										if (grant != null)
 										{
 											boolean found = false;
-											for (RolGrant grant2: grants)
+											for (RolGrant grant2: new LinkedList<RolGrant> (grants))
 											{
 												if (grant2.getRolName() .equals(grant.getRolName()))
 												{
@@ -597,10 +781,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 												}
 												for (InvocationMethod m: getMethods(jsonObject.getObjectType(), "delete"))
 												{
-													if (runTrigger(SoffidObjectTrigger.PRE_DELETE, grantObject, jsonObject, jsonObject))
+													if (runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
 													{
 														invoke (m, jsonObject);
-														runTrigger(SoffidObjectTrigger.POST_DELETE, grantObject, jsonObject, jsonObject);
+														runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject, jsonObject);
 													}
 												}
 											}
@@ -613,6 +797,106 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							for (RolGrant grant: grants)
 							{
 								grant.setOwnerAccountName(accountName);
+								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
+								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
+								for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
+								{
+									if (runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject, targetObject, null))
+									{
+										invoke (m, targetObject);
+										runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+									}
+								}
+							}
+						}
+					} finally {
+						mapping.setCondition(condition);
+					}
+				}
+			}
+		} catch (JSONException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		} catch (UnsupportedEncodingException e) {
+			throw new InternalErrorException ("Error parsing json object", e);
+		}
+	}
+
+
+	private void updateRoleGrants(String roleName, Long roleId) throws InternalErrorException, UnknownRoleException {
+		try {
+			for (ExtensibleObjectMapping mapping: objectMappings)
+			{
+				String prop = mapping.getProperties().get("drivenByRole");
+				if ( prop != null &&
+						(mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANT) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ALL_GRANTED_ROLES) ||
+						mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_GRANTED_ROLE)))
+				{
+					if (debug)
+						log.info("Using "+mapping.getSystemObject()+" mapping to update "+roleName+" users");
+					Collection<Account> accounts = getServer().getRoleActiveAccounts(roleId, getCodi());
+					
+					RolGrant rg = new RolGrant();
+					rg.setDispatcher(getCodi());
+					rg.setRolName(roleName);
+					rg.setOwnerDispatcher(getCodi());
+					GrantExtensibleObject geo = new GrantExtensibleObject(rg, getServer());
+					geo.setObjectType(mapping.getSoffidObject().toString());
+					String condition = mapping.getCondition();
+					try {
+						mapping.setCondition(null);
+						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
+						if (jsonObj != null)
+						{
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							if (jsonStoredObjects != null)
+							{
+								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
+								{
+									ExtensibleObject grantObject = objectTranslator.parseInputObject(jsonObject, mapping);
+									if (grantObject != null)
+									{
+										RolGrant grant = vom.parseGrant(grantObject);
+										
+										if (grant != null)
+										{
+											boolean found = false;
+											for (Account account: new LinkedList<Account>(accounts))
+											{
+												if (account.getName() .equals(grant.getOwnerAccountName()))
+												{
+													found = true;
+													accounts.remove(account);
+												}
+											}
+											if (! found)
+											{
+												if (debug)
+												{
+													log.info("Removing grant "+grantObject+" object type = "+jsonObject.getObjectType());
+												}
+												for (InvocationMethod m: getMethods(jsonObject.getObjectType(), "delete"))
+												{
+													if (runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
+													{
+														invoke (m, jsonObject);
+														runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject, jsonObject);
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+							if (debug)
+								log.info("Adding new grants");
+							for (Account account: accounts)
+							{
+								RolGrant grant = new RolGrant();
+								grant.setDispatcher(getCodi());
+								grant.setRolName(roleName);
+								grant.setOwnerDispatcher(getCodi());
+								grant.setOwnerAccountName(account.getName());
 								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
 								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
 								for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
@@ -739,6 +1023,25 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							if (jsonStoredObject != null)
 							{
 								role  = vom.parseRol(objectTranslator.parseInputObject(jsonStoredObject, mapping));
+								List<RolGrant> grants = new LinkedList<RolGrant>();
+								if ( tryRoleFetch(roleName, grants) ||
+										tryGrantByGroupFetch(roleName, grants))
+								{
+									for (RolGrant grant: grants) 
+									{
+										if (grant.getOwnerAccountName() != null)
+										{
+											log.info("Keeping grant of role "+roleName+" to "+grant.getOwnerAccountName());
+											Set<String> r = userRoles.get(grant.getOwnerAccountName());
+											if (r == null)
+											{
+												r = new HashSet<String>();
+												userRoles.put(grant.getOwnerAccountName(), r);
+											}
+											r.add (roleName);									
+										}
+									}
+								}
 								if (role != null)
 									return role;
 							}
@@ -761,6 +1064,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		LinkedList<String> accounts = new LinkedList<String>();
 		
 		try {
+			userRoles.clear();
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_ROLE))
@@ -814,7 +1118,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		try {
 			for (ExtensibleObjectMapping eom: objectMappings)
 			{
-				if (! "true".equals( eom.getProperties().get("preventDeletion")))
+				if (eom.getSoffidObject().equals(SoffidObjectType.OBJECT_ACCOUNT)  &&
+						! "true".equals( eom.getProperties().get("preventDeletion")))
 				{
 					String condition = eom.getCondition();
 					eom.setCondition(null);
@@ -893,6 +1198,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						removeScimUser(acc.getName());
 					}
+					updateAccountGrants(acc.getName());
 				}
 			}
 		}
@@ -1981,6 +2287,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			ExtensibleObject newObject,
 			ExtensibleObject oldObject) throws InternalErrorException
 	{
+		log.info("Testing trigger "+triggerType.toString());
+		log.info("  oldObjectType "+(oldObject == null ? "null": oldObject.getObjectType()));
+		log.info("  newObjectType "+(newObject == null ? "null": newObject.getObjectType()));
+		log.info("  soffidType    "+(soffidObject == null ? "null": soffidObject.getObjectType()));
 		SoffidObjectType sot = SoffidObjectType.fromString(soffidObject.getObjectType());
 		for ( ExtensibleObjectMapping eom : objectTranslator.getObjectsBySoffidType(sot))
 		{
@@ -1992,6 +2302,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					{
 						if (trigger.getTrigger().equals (triggerType))
 						{
+							log.info("  found "+trigger.getScript());
 							ExtensibleObject eo = new ExtensibleObject();
 							eo.setAttribute("source", soffidObject);
 							eo.setAttribute("newObject", newObject);
