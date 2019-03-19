@@ -212,7 +212,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					for (InvocationMethod m: getMethods(mapping.getSystemObject(), "select"))
 					{
 						ExtensibleObject object = new ExtensibleObject();
-						ExtensibleObjects objects = invoke (m, object);
+						ExtensibleObjects objects = invoke (m, object, null);
 						if (objects != null)
 						{
 							for (ExtensibleObject eo: objects.getObjects())
@@ -298,18 +298,21 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		{
 			debugObject("Removing object", object, "");
 			
-			ExtensibleObject existingObject = searchJsonObject(object);
+			ExtensibleObject existingObject = searchJsonObject(object, soffidObject);
 		
 			if (existingObject != null)
 			{
+				boolean triggerRan = false;
 				for (InvocationMethod m: getMethods(object.getObjectType(), "delete"))
 				{
-					if (runTrigger(SoffidObjectTrigger.PRE_DELETE, soffidObject, object, existingObject))
+					if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_DELETE, soffidObject, object, existingObject))
 					{
-						invoke (m, object);
-						runTrigger(SoffidObjectTrigger.POST_DELETE, soffidObject, object, existingObject);
+						triggerRan = true;
+						invoke (m, object, soffidObject);
 					}
 				}
+				if (triggerRan)
+					runTrigger(SoffidObjectTrigger.POST_DELETE, soffidObject, object, existingObject);
 			}
 		}
 		catch (Exception e)
@@ -473,10 +476,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						rol2.setNom(roleName);
 						rol2.setBaseDeDades(getCodi());
 					}
+					RoleExtensibleObject srcObject = new RoleExtensibleObject(rol2, getServer());
 					ExtensibleObject obj = objectTranslator.generateObject(
-							new RoleExtensibleObject(rol2, getServer()), mapping);
+							srcObject, mapping);
 					if (obj != null) {
-						obj = searchJsonObject(obj);
+						obj = searchJsonObject(obj, srcObject);
 						if (obj != null) {
 							ExtensibleObject soffidObject = objectTranslator
 									.parseInputObject(obj, mapping);
@@ -556,10 +560,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							.getAccountInfo(accountName, getCodi());
 					if (acc != null)
 					{
+						AccountExtensibleObject srcObject = new AccountExtensibleObject(acc, getServer());
 						ExtensibleObject obj = objectTranslator.generateObject(
-								new AccountExtensibleObject(acc, getServer()), mapping);
+								srcObject, mapping);
 						if (obj != null) {
-							obj = searchJsonObject(obj);
+							obj = searchJsonObject(obj, srcObject);
 							if (obj != null) {
 								ExtensibleObject soffidObject = objectTranslator
 										.parseInputObject(obj, mapping);
@@ -626,7 +631,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
 						if (jsonObj != null)
 						{
-							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj, geo);
 							if (jsonStoredObjects != null)
 							{
 								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
@@ -685,7 +690,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
 						if (jsonObj != null)
 						{
-							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj, geo);
 							if (jsonStoredObjects != null)
 							{
 								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
@@ -747,7 +752,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
 						if (jsonObj != null)
 						{
-							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj, geo);
 							if (jsonStoredObjects != null)
 							{
 								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
@@ -779,14 +784,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 												{
 													log.info("Removing grant "+grantObject);
 												}
+												boolean triggerRan = false;
 												for (InvocationMethod m: getMethods(jsonObject.getObjectType(), "delete"))
 												{
-													if (runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
+													if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
 													{
-														invoke (m, jsonObject);
-														runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject, jsonObject);
+														triggerRan = true;
+														invoke (m, jsonObject, grantObject);
 													}
 												}
+												if (triggerRan)
+													runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject, jsonObject);
 											}
 										}
 									}
@@ -799,14 +807,16 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 								grant.setOwnerAccountName(accountName);
 								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
 								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
+								boolean triggerRan = false;
 								for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
 								{
-									if (runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject, targetObject, null))
+									if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject, targetObject, null))
 									{
-										invoke (m, targetObject);
-										runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+										invoke (m, targetObject, sourceObject);
 									}
 								}
+								if (triggerRan)
+									runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
 							}
 						}
 					} finally {
@@ -848,7 +858,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
 						if (jsonObj != null)
 						{
-							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj);
+							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj, geo);
 							if (jsonStoredObjects != null)
 							{
 								for (ExtensibleObject jsonObject: jsonStoredObjects.getObjects())
@@ -875,14 +885,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 												{
 													log.info("Removing grant "+grantObject+" object type = "+jsonObject.getObjectType());
 												}
+												boolean triggerRan = false;
 												for (InvocationMethod m: getMethods(jsonObject.getObjectType(), "delete"))
 												{
-													if (runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
+													if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
 													{
-														invoke (m, jsonObject);
-														runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject, jsonObject);
+														triggerRan = true;
+														invoke (m, jsonObject, grantObject);
 													}
 												}
+												if (triggerRan)
+													runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject, jsonObject);
 											}
 										}
 									}
@@ -899,14 +912,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 								grant.setOwnerAccountName(account.getName());
 								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
 								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
+								boolean triggerRan = false;
 								for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
 								{
-									if (runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject, targetObject, null))
+									if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject, targetObject, null))
 									{
-										invoke (m, targetObject);
-										runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+										triggerRan = true;
+										invoke (m, targetObject, sourceObject);
 									}
 								}
+								if (triggerRan)
+									runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
 							}
 						}
 					} finally {
@@ -936,12 +952,13 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					String condition = mapping.getCondition();
 					try {
 						mapping.setCondition(null);
-						ExtensibleObject scimObj = objectTranslator.generateObject(new AccountExtensibleObject(acc, getServer()), mapping);
+						AccountExtensibleObject sourceObject = new AccountExtensibleObject(acc, getServer());
+						ExtensibleObject scimObj = objectTranslator.generateObject(sourceObject, mapping);
 						if (scimObj != null)
 						{
 							if (debug)
 								debugObject("Looking for object", scimObj, "");
-							ExtensibleObject scimStoredObject = searchJsonObject(scimObj);
+							ExtensibleObject scimStoredObject = searchJsonObject(scimObj, sourceObject);
 							if (scimStoredObject != null)
 							{
 								debugObject("got object", scimStoredObject, "");
@@ -981,7 +998,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					s.setObjectType(mapping.getSoffidObject().toString());
 					ExtensibleObject eo = objectTranslator.generateObject(s, mapping, true);
 					
-					ExtensibleObjects objects = loadJsonObjects(eo);
+					ExtensibleObjects objects = loadJsonObjects(eo, s);
 					
 					if (objects == null)
 						throw new InternalErrorException("No accounts found");
@@ -1016,10 +1033,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					String condition = mapping.getCondition();
 					try {
 						mapping.setCondition(null);
-						ExtensibleObject jsonObj = objectTranslator.generateObject(new RoleExtensibleObject(role, getServer()), mapping);
+						RoleExtensibleObject sourceObject = new RoleExtensibleObject(role, getServer());
+						ExtensibleObject jsonObj = objectTranslator.generateObject(sourceObject, mapping);
 						if (jsonObj != null)
 						{
-							ExtensibleObject jsonStoredObject = searchJsonObject(jsonObj);
+							ExtensibleObject jsonStoredObject = searchJsonObject(jsonObj, sourceObject);
 							if (jsonStoredObject != null)
 							{
 								role  = vom.parseRol(objectTranslator.parseInputObject(jsonStoredObject, mapping));
@@ -1072,7 +1090,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					ExtensibleObject eo = new ExtensibleObject();
 					eo.setObjectType(mapping.getSystemObject());
 					
-					ExtensibleObjects objects = loadJsonObjects(eo);
+					ExtensibleObjects objects = loadJsonObjects(eo, null);
 					
 					for ( ExtensibleObject object : objects.getObjects())
 					{
@@ -1259,7 +1277,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			
 			public ExtensibleObject find(ExtensibleObject pattern) throws Exception {
 				log.info("Searching for native object "+pattern.toString());
-				return searchJsonObject(pattern);
+				return searchJsonObject(pattern, null);
 			}
 
 			public Collection<Map<String,Object>> invoke (String verb, String command, Map<String, Object> params) throws InternalErrorException
@@ -1285,7 +1303,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						o.setObjectType(v[0]);
 						o.putAll(params);
 						try {
-							ExtensibleObjects objects = jsonAgent.invoke(m, o);
+							ExtensibleObjects objects = jsonAgent.invoke(m, o, null);
 							for ( ExtensibleObject eo: objects.getObjects())
 							{
 								r.add(eo);
@@ -1333,9 +1351,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	}
 
 
-	protected ExtensibleObject searchJsonObject (ExtensibleObject object) throws InternalErrorException, JSONException, UnsupportedEncodingException
+	protected ExtensibleObject searchJsonObject (ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException, UnsupportedEncodingException
 	{
-		ExtensibleObjects objects = searchJsonObjects(object);
+		ExtensibleObjects objects = searchJsonObjects(object, sourceObject);
 		if (objects != null && objects.getObjects().size() > 0)
 		{
 			if (objects.getObjects().size() > 1)
@@ -1351,11 +1369,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
-	private ExtensibleObjects searchJsonObjects (ExtensibleObject object) throws InternalErrorException, JSONException, UnsupportedEncodingException
+	private ExtensibleObjects searchJsonObjects (ExtensibleObject object, ExtensibleObject source) throws InternalErrorException, JSONException, UnsupportedEncodingException
 	{
 		for (InvocationMethod m: getMethods(object.getObjectType(), "select"))
 		{
-			ExtensibleObjects objects = invoke (m, object);
+			ExtensibleObjects objects = invoke (m, object, source);
 			if (objects != null && objects.getObjects().size() > 0)
 			{
 				return objects;
@@ -1364,11 +1382,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
-	private ExtensibleObjects loadJsonObjects (ExtensibleObject object) throws InternalErrorException, JSONException, UnsupportedEncodingException
+	private ExtensibleObjects loadJsonObjects (ExtensibleObject object, ExtensibleObject source) throws InternalErrorException, JSONException, UnsupportedEncodingException
 	{
 		for (InvocationMethod m: getMethods(object.getObjectType(), "load"))
 		{
-			ExtensibleObjects objects = invoke (m, object);
+			ExtensibleObjects objects = invoke (m, object, source);
 			if (objects != null && objects.getObjects().size() > 0)
 			{
 				return objects;
@@ -1377,8 +1395,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
-	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object) throws InternalErrorException, JSONException 
+	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException 
 	{
+		if ( sourceObject != null && m.condition != null && ! m.condition.trim().isEmpty())
+		{
+			Object v = objectTranslator.evalCondition(sourceObject, getMapping(object.getObjectType()));
+			if ( ! Boolean.TRUE.equals(v))
+			{
+				log.info("Condition for method "+m.path+" did not return true. Skipping");
+				return null;
+			}
+		}
 		String path = translatePath (m, object);
 		boolean repeat = false;
 		boolean addParams = true;
@@ -2101,6 +2128,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.path = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Results"))
 					im.results = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("Condition"))
+					im.condition = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Check"))
 					im.check = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Next"))
@@ -2146,33 +2175,39 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return methods;
 	}
 
-	protected void updateObject (ExtensibleObject soffidobject, ExtensibleObject targetObject)
+	protected void updateObject (ExtensibleObject soffidObject, ExtensibleObject targetObject)
 			throws InternalErrorException
 	{
 		try
 		{
-			ExtensibleObject existingObject = searchJsonObject(targetObject);
+			ExtensibleObject existingObject = searchJsonObject(targetObject, soffidObject);
 		
 			if (existingObject == null)
 			{
+				boolean triggerRan = false;
 				for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
 				{
-					if (runTrigger(SoffidObjectTrigger.PRE_INSERT, soffidobject, targetObject, existingObject))
+					if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, soffidObject, targetObject, existingObject))
 					{
-						invoke (m, targetObject);
-						runTrigger(SoffidObjectTrigger.POST_INSERT, soffidobject, targetObject, existingObject);
+						triggerRan = true;
+						invoke (m, targetObject, soffidObject);
 					}
 				}
+				if (triggerRan)
+					runTrigger(SoffidObjectTrigger.POST_INSERT, soffidObject, targetObject, existingObject);
 			}
 			else
 			{
+				boolean triggerRan = false;
 				for (InvocationMethod m: getMethods(targetObject.getObjectType(), "update"))
 				{
-					if (runTrigger(SoffidObjectTrigger.PRE_UPDATE, soffidobject, targetObject, existingObject))
+					if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_UPDATE, soffidObject, targetObject, existingObject))
 					{
-						invoke (m, targetObject);
-						runTrigger(SoffidObjectTrigger.POST_UPDATE, soffidobject, targetObject, existingObject);
+						triggerRan = true;
+						invoke (m, targetObject, soffidObject);
 					}
+					if (triggerRan)
+						runTrigger(SoffidObjectTrigger.POST_UPDATE, soffidObject, targetObject, existingObject);
 				}
 			}
 		}

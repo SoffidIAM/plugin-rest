@@ -36,7 +36,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 				if (map.appliesToSoffidObject(sourceObject))
 				{
 					ExtensibleObject target = objectTranslator.generateObject(sourceObject, map, true);
-					ExtensibleObject target2 = searchJsonObject(target);
+					ExtensibleObject target2 = searchJsonObject(target, sourceObject);
 					if (target2 != null && !target2.isEmpty())
 						return target2;						
 				}
@@ -59,7 +59,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 							object1.equals(map.getSoffidCustomObject()))
 					{
 						ExtensibleObject target = objectTranslator.generateObject(sourceObject, map, true);
-						ExtensibleObject target2 = searchJsonObject(target);
+						ExtensibleObject target2 = searchJsonObject(target, sourceObject);
 						if (target2 != null && ! target2.isEmpty())
 						{
 							ExtensibleObject src2 = objectTranslator.parseInputObject(target2, map);
@@ -154,7 +154,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 					{
 						ExtensibleObject object = new ExtensibleObject();
 						object.setObjectType(mapping.getSystemObject().toString());
-						ExtensibleObjects objects = invoke (m, object);
+						ExtensibleObjects objects = invoke (m, object, null);
 						if (objects != null)
 						{
 							for (ExtensibleObject eo: objects.getObjects())

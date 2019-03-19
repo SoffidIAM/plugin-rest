@@ -13,6 +13,7 @@ public class InvocationMethod
 	public String check;
 	public String next;
 	public String template;
+	public String condition;
 	public String[] parameters;
 	public List<String[]> headers;
 }
