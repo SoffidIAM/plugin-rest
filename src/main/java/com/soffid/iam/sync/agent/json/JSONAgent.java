@@ -60,11 +60,9 @@ import es.caib.seycon.ng.exception.UnknownRoleException;
 import es.caib.seycon.ng.exception.UnknownUserException;
 import es.caib.seycon.ng.sync.agent.Agent;
 import es.caib.seycon.ng.sync.engine.extobj.AccountExtensibleObject;
-import es.caib.seycon.ng.sync.engine.extobj.AttributeReference;
 import es.caib.seycon.ng.sync.engine.extobj.ExtensibleObjectFinder;
 import es.caib.seycon.ng.sync.engine.extobj.GrantExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.GroupExtensibleObject;
-import es.caib.seycon.ng.sync.engine.extobj.MemberAttributeReference;
 import es.caib.seycon.ng.sync.engine.extobj.ObjectTranslator;
 import es.caib.seycon.ng.sync.engine.extobj.RoleExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.UserExtensibleObject;
@@ -92,7 +90,6 @@ import es.caib.seycon.ng.sync.intf.UserMgr;
 public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, ReconcileMgr2, GroupMgr, RoleMgr,
 	AuthoritativeIdentitySource2 {
 
-	private static final long serialVersionUID = 1L;
 	protected ValueObjectMapper vom = new ValueObjectMapper();
 	protected ObjectTranslator objectTranslator = null;
 	protected boolean debug;
@@ -277,13 +274,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
-	private void removeObjects(ExtensibleObject soffidObject, ExtensibleObjects targetObjects) throws InternalErrorException {
-		for (ExtensibleObject obj: targetObjects.getObjects())
-		{
-			removeObject (soffidObject, obj);
-		}
-	}
-
 	protected void removeObject(ExtensibleObject soffidObject, ExtensibleObject object) throws InternalErrorException {
 		try
 		{
@@ -450,6 +440,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return grants;
 	}
 
+	@SuppressWarnings({ "unchecked", "unused" })
 	private boolean tryRoleFetch(String roleName, List<RolGrant> grants) throws InternalErrorException {
 		try {
 			boolean found = false;
@@ -541,6 +532,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	private boolean tryAccountFetch(String accountName, List<RolGrant> grants) throws InternalErrorException {
 		try {
 			boolean found = false;
@@ -1274,6 +1266,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				return searchJsonObject(pattern, null);
 			}
 
+			@SuppressWarnings("unused")
 			public Collection<Map<String,Object>> invoke (String verb, String command, Map<String, Object> params) throws InternalErrorException
 			{
 				if (debug)
@@ -1389,6 +1382,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException 
 	{
 		if ( sourceObject != null && m.condition != null && ! m.condition.trim().isEmpty())
@@ -1617,6 +1611,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	private void parseXmlEntity(Element entity, Map<String, Object> resp) {
 		String tagName = entity.getLocalName();
 		List<Object> o  = (List<Object>) resp.get(tagName);
@@ -1650,6 +1645,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("rawtypes")
 	void fixupXmlObject (Map<String,Object> o )
 	{
 		for (String k: o.keySet())
@@ -1733,6 +1729,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return path;
 	}
 
+	@SuppressWarnings("deprecation")
 	protected String encode(InvocationMethod m, ExtensibleObject object) throws JSONException, InternalErrorException {
 		if ("application/x-www-form-urlencoded".equalsIgnoreCase(m.encoding) ||
 				"multipart/form-data".equalsIgnoreCase(m.encoding))
@@ -1921,6 +1918,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return v instanceof Map;
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private void fillXmlData(Element root, Object object) {
 		if (object == null)
 		{
@@ -2007,22 +2005,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
-	private String getJsonReference(AttributeReference ar) {
-		String ft = null;
-		while (ar != null)
-		{
-			if (ar instanceof MemberAttributeReference)
-			{
-				if (ft == null)
-					ft = ((MemberAttributeReference) ar).getMember();
-				else
-					ft = ((MemberAttributeReference) ar).getMember()+"."+ft;
-			}
-			ar = ar.getParentReference();
-		}
-		return ft;
-	}
-
+	@SuppressWarnings("rawtypes")
 	protected void json2map(JSONObject jsonObject, Map<String,Object> map) throws JSONException 
 	{
 		for ( Iterator it = jsonObject.keys(); it.hasNext(); )
@@ -2059,6 +2042,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("rawtypes")
 	private void map2json(Map<String,Object> map, JSONObject jsonObject) throws JSONException 
 	{
 		for ( Iterator it = map.keySet().iterator(); it.hasNext(); )
@@ -2070,6 +2054,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Object java2json(Object javaObject) throws JSONException {
 		if (javaObject instanceof Map)
 		{
@@ -2227,6 +2212,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		debugObject(msg, obj, indent, "");
 	}
 	
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	void debugObject (String msg, Object obj, String indent, String attributeName)
 	{
 		if (debug)
