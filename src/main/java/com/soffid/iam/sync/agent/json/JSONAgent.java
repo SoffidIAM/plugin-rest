@@ -93,39 +93,23 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	AuthoritativeIdentitySource2 {
 
 	private static final long serialVersionUID = 1L;
-
 	protected ValueObjectMapper vom = new ValueObjectMapper();
-	
 	protected ObjectTranslator objectTranslator = null;
-	
 	protected boolean debug;
 	
-	/** Usuario root de conexión LDAP */
 	String loginDN;
-	/** Password del usuario administrador cn=root,dc=caib,dc=es */
 	Password password;
-	/** HOST donde se aloja LDAP */
 	String serverUrl;
-	
 	String authMethod;
-	
 	String authUrl;
-	
 	String scimVersion;
-	
 	String contentType;
 
 	protected Collection<ExtensibleObjectMapping> objectMappings;
-	// --------------------------------------------------------------
-
 	private ApacheHttpClientConfig config;
-
 	protected RestClient client;
-
 	private static final int MAX_LOG = 1000;
-	
 	boolean grantsInRole = false;
-	
 	Map<String,Set<String>> userRoles = new HashMap<String, Set<String>>();
 
 	/**
@@ -143,10 +127,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	Map<String, String> templates = new HashMap<String, String>();
 	@Override
 	public void init() throws InternalErrorException {
-		log.info("Starting REST agent on {}", getDispatcher().getCodi(),
-				null);
+		log.info("Starting REST agent on {}", getDispatcher().getCodi(), null);
 		loginDN = getDispatcher().getParam0();
-		password = Password.decode(getDispatcher().getParam1());
+		if (getDispatcher().getParam1()!=null) {
+			try {
+				password = Password.decode(getDispatcher().getParam1());
+				log.info(">>> password decoded");
+			} catch (Exception e) {
+				password = null;
+				log.info(">>> error decoding password");
+			}
+		}
 		authMethod = getDispatcher().getParam2();
 		authUrl = getDispatcher().getParam3();
 		serverUrl = getDispatcher().getParam4();
