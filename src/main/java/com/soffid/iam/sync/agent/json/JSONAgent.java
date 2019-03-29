@@ -1490,8 +1490,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response.getStatusCode() != HttpStatus.NO_CONTENT.getCode())
 				{
 					String text = response.getEntity(String.class);
-					if (debug)log.info("ERROR "+response.getMessage()+": \n"+text);
-					throw new InternalErrorException(new String("Error on invocation "+response.getMessage()+"\n"+text).substring(0, 800));
+					String message = response.getMessage();
+					String UIMessage = "Error on invocation: "+message+"\n"+text;
+					if (debug) log.info(UIMessage);
+					int max = (UIMessage.length()>800) ? 800 : UIMessage.length();
+					throw new InternalErrorException(UIMessage.substring(0, max));
 				}
 		
 				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
