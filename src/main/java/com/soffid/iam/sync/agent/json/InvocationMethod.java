@@ -13,8 +13,6 @@ public class InvocationMethod
 	public String next;
 	public String template;
 	public String condition;
-	public String notFound;
-	public String avoid;
 	public String[] parameters;
 	public List<String[]> headers;
 }

@@ -1376,18 +1376,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	{
 		for (InvocationMethod m: getMethods(object.getObjectType(), "select"))
 		{
-			// PATCH TO AVOID FAILING THE SELECT WHEN THERE IS NO REQUEST TO RECOVER A ROLE
-			// For reconciliations that only have one method to retrieve the name of the roles
-			if (m.avoid!=null && "true".equals(m.avoid)) {
-				ExtensibleObject eo = new ExtensibleObject();
-				eo.setObjectType(object.getObjectType());
-				eo.put("result", object.getAttribute("RoleName"));
-				ExtensibleObjects eos = new ExtensibleObjects();
-				eos.getObjects().add(eo);
-				if (debug) log.info("m.avoid = "+m.avoid+", se creará el role: "+object.getAttribute("RoleName"));
-				return eos;
-			}
-
 			ExtensibleObjects objects = invoke (m, object, source);
 			if (objects != null && objects.getObjects().size() > 0)
 			{
@@ -1489,35 +1477,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							log.info("Invoking "+m.method+" on "+path+": "+params);
 
 						response = request.invoke(m.method, ClientResponse.class, params);
-					}
-				}
-
-				//
-				// We manage the patch to look for the false notFound
-				// When the webservice returns HTTP 200 with a data error instead of HTTP 404
-				//
-				if (debug) log.info("m.notFound: "+m.notFound);
-				if (m.notFound != null) {
-					if (debug) log.info("Existe el property *NotFound, comprobamos primero si la respuesta es un 'falso' NotFound");
-					try {
-						String mimeType = response.getHeaders().getFirst("Content-Type");
-						ExtensibleObject resp = new ExtensibleObject();
-						resp.setObjectType(object.getObjectType());
-						if (mimeType.contains("json")) {
-							String txt = response.getEntity(String.class);
-							parseJsonObject(m, path, txt, resp);
-						} else if (mimeType.contains("xml")){
-							byte[] r = response.getEntity(byte[].class);
-							parseXmlObject(m, path, r, resp);
-						} else {
-							throw new InternalErrorException("Unexpected response type "+mimeType);
-						}
-						Object result = objectTranslator.eval(m.notFound, resp);
-						if (debug) log.info("Respuensta encontrada, es un falso 'NotFound', devolvemos null. Result: "+result);
-						response.consumeContent();
-						return null;
-					} catch (Exception e) {
-						if (debug) log.info("No se ha encontrado el mensaje de la respuesta, no hacemos nada, no podemos confirmar que sea un 'falso' NotFound. Exception e: "+e.getMessage());
 					}
 				}
 
@@ -2182,10 +2141,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.parameters = mapping.getProperties().get(k).split("[, ]+");
 				else if (tag.equalsIgnoreCase("Template"))
 					im.template = mapping.getProperties().get(k);
-				else if (tag.equalsIgnoreCase("NotFound"))
-					im.notFound = mapping.getProperties().get(k);
-				else if (tag.equalsIgnoreCase("Avoid"))
-					im.avoid = mapping.getProperties().get(k);
 				else if (tag.toLowerCase().startsWith("header"))
 				{
 					String v = mapping.getProperties().get(k);
