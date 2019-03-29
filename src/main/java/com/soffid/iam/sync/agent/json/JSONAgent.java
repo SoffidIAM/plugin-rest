@@ -1414,8 +1414,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	{
 		if ( sourceObject != null && m.condition != null && ! m.condition.trim().isEmpty())
 		{
-			Object v = objectTranslator.evalCondition(sourceObject, getMapping(object.getObjectType()));
-			if ( ! Boolean.TRUE.equals(v))
+			if (! objectTranslator.evalExpression(sourceObject, m.condition))
 			{
 				log.info("Condition for method "+m.path+" did not return true. Skipping");
 				return null;
