@@ -63,11 +63,9 @@ import es.caib.seycon.ng.exception.UnknownRoleException;
 import es.caib.seycon.ng.exception.UnknownUserException;
 import es.caib.seycon.ng.sync.agent.Agent;
 import es.caib.seycon.ng.sync.engine.extobj.AccountExtensibleObject;
-import es.caib.seycon.ng.sync.engine.extobj.AttributeReference;
 import es.caib.seycon.ng.sync.engine.extobj.ExtensibleObjectFinder;
 import es.caib.seycon.ng.sync.engine.extobj.GrantExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.GroupExtensibleObject;
-import es.caib.seycon.ng.sync.engine.extobj.MemberAttributeReference;
 import es.caib.seycon.ng.sync.engine.extobj.ObjectTranslator;
 import es.caib.seycon.ng.sync.engine.extobj.RoleExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.UserExtensibleObject;
@@ -95,40 +93,23 @@ import es.caib.seycon.ng.sync.intf.UserMgr;
 public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, ReconcileMgr2, GroupMgr, RoleMgr,
 	AuthoritativeIdentitySource2 {
 
-	private static final long serialVersionUID = 1L;
-
 	protected ValueObjectMapper vom = new ValueObjectMapper();
-	
 	protected ObjectTranslator objectTranslator = null;
-	
 	protected boolean debug;
 	
-	/** Usuario root de conexión LDAP */
 	String loginDN;
-	/** Password del usuario administrador cn=root,dc=caib,dc=es */
 	Password password;
-	/** HOST donde se aloja LDAP */
 	String serverUrl;
-	
 	String authMethod;
-	
 	String authUrl;
-	
 	String scimVersion;
-	
 	String contentType;
 
 	protected Collection<ExtensibleObjectMapping> objectMappings;
-	// --------------------------------------------------------------
-
 	private ApacheHttpClientConfig config;
-
 	protected RestClient client;
-
 	private static final int MAX_LOG = 1000;
-	
 	boolean grantsInRole = false;
-	
 	Map<String,Set<String>> userRoles = new HashMap<String, Set<String>>();
 
 	/**
@@ -146,10 +127,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	Map<String, String> templates = new HashMap<String, String>();
 	@Override
 	public void init() throws InternalErrorException {
-		log.info("Starting REST agent on {}", getDispatcher().getCodi(),
-				null);
+		log.info("Starting REST agent on {}", getDispatcher().getCodi(), null);
 		loginDN = getDispatcher().getParam0();
-		password = Password.decode(getDispatcher().getParam1());
+		if (getDispatcher().getParam1()!=null) {
+			try {
+				password = Password.decode(getDispatcher().getParam1());
+				log.info(">>> password decoded");
+			} catch (Exception e) {
+				password = null;
+				log.info(">>> error decoding password");
+			}
+		}
 		authMethod = getDispatcher().getParam2();
 		authUrl = getDispatcher().getParam3();
 		serverUrl = getDispatcher().getParam4();
@@ -286,13 +274,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			} catch (Exception e) {
 				throw new InternalErrorException(e.getMessage(), e);
 			}
-		}
-	}
-
-	private void removeObjects(ExtensibleObject soffidObject, ExtensibleObjects targetObjects) throws InternalErrorException {
-		for (ExtensibleObject obj: targetObjects.getObjects())
-		{
-			removeObject (soffidObject, obj);
 		}
 	}
 
@@ -462,6 +443,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return grants;
 	}
 
+	@SuppressWarnings({ "unchecked", "unused" })
 	private boolean tryRoleFetch(String roleName, List<RolGrant> grants) throws InternalErrorException {
 		try {
 			boolean found = false;
@@ -553,6 +535,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	private boolean tryAccountFetch(String accountName, List<RolGrant> grants) throws InternalErrorException {
 		try {
 			boolean found = false;
@@ -1286,6 +1269,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				return searchJsonObject(pattern, null);
 			}
 
+			@SuppressWarnings("unused")
 			public Collection<Map<String,Object>> invoke (String verb, String command, Map<String, Object> params) throws InternalErrorException
 			{
 				if (debug)
@@ -1379,18 +1363,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	{
 		for (InvocationMethod m: getMethods(object.getObjectType(), "select"))
 		{
-			// PATCH TO AVOID FAILING THE SELECT WHEN THERE IS NO REQUEST TO RECOVER A ROLE
-			// For reconciliations that only have one method to retrieve the name of the roles
-			if (m.avoid!=null && "true".equals(m.avoid)) {
-				ExtensibleObject eo = new ExtensibleObject();
-				eo.setObjectType(object.getObjectType());
-				eo.put("result", object.getAttribute("RoleName"));
-				ExtensibleObjects eos = new ExtensibleObjects();
-				eos.getObjects().add(eo);
-				if (debug) log.info("m.avoid = "+m.avoid+", se creará el role: "+object.getAttribute("RoleName"));
-				return eos;
-			}
-
 			ExtensibleObjects objects = invoke (m, object, source);
 			if (objects != null && objects.getObjects().size() > 0)
 			{
@@ -1413,6 +1385,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException 
 	{
 		if ( sourceObject != null && m.condition != null && ! m.condition.trim().isEmpty())
@@ -1495,35 +1468,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					}
 				}
 
-				//
-				// We manage the patch to look for the false notFound
-				// When the webservice returns HTTP 200 with a data error instead of HTTP 404
-				//
-				if (debug) log.info("m.notFound: "+m.notFound);
-				if (m.notFound != null) {
-					if (debug) log.info("Existe el property *NotFound, comprobamos primero si la respuesta es un 'falso' NotFound");
-					try {
-						String mimeType = response.getHeaders().getFirst("Content-Type");
-						ExtensibleObject resp = new ExtensibleObject();
-						resp.setObjectType(object.getObjectType());
-						if (mimeType.contains("json")) {
-							String txt = response.getEntity(String.class);
-							parseJsonObject(m, path, txt, resp);
-						} else if (mimeType.contains("xml")){
-							byte[] r = response.getEntity(byte[].class);
-							parseXmlObject(m, path, r, resp);
-						} else {
-							throw new InternalErrorException("Unexpected response type "+mimeType);
-						}
-						Object result = objectTranslator.eval(m.notFound, resp);
-						if (debug) log.info("Respuensta encontrada, es un falso 'NotFound', devolvemos null. Result: "+result);
-						response.consumeContent();
-						return null;
-					} catch (Exception e) {
-						if (debug) log.info("No se ha encontrado el mensaje de la respuesta, no hacemos nada, no podemos confirmar que sea un 'falso' NotFound. Exception e: "+e.getMessage());
-					}
-				}
-
 				if (response.getStatusCode() == HttpStatus.NOT_FOUND.getCode())
 				{
 					response.consumeContent();
@@ -1534,8 +1478,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response.getStatusCode() != HttpStatus.NO_CONTENT.getCode())
 				{
 					String text = response.getEntity(String.class);
-					if (debug)log.info("ERROR "+response.getMessage()+": \n"+text);
-					throw new InternalErrorException(new String("Error on invocation "+response.getMessage()+"\n"+text).substring(0, 800));
+					String message = response.getMessage();
+					String UIMessage = "Error on invocation: "+message+"\n"+text;
+					if (debug) log.info(UIMessage);
+					int max = (UIMessage.length()>800) ? 800 : UIMessage.length();
+					throw new InternalErrorException(UIMessage.substring(0, max));
 				}
 		
 				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
@@ -1667,6 +1614,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	private void parseXmlEntity(Element entity, Map<String, Object> resp) {
 		String tagName = entity.getLocalName();
 		List<Object> o  = (List<Object>) resp.get(tagName);
@@ -1700,6 +1648,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("rawtypes")
 	void fixupXmlObject (Map<String,Object> o )
 	{
 		for (String k: o.keySet())
@@ -1791,6 +1740,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return path;
 	}
 
+	@SuppressWarnings("deprecation")
 	protected String encode(InvocationMethod m, ExtensibleObject object) throws JSONException, InternalErrorException {
 		if ("application/x-www-form-urlencoded".equalsIgnoreCase(m.encoding) ||
 				"multipart/form-data".equalsIgnoreCase(m.encoding))
@@ -1979,6 +1929,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return v instanceof Map;
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private void fillXmlData(Element root, Object object) {
 		if (object == null)
 		{
@@ -2065,22 +2016,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
-	private String getJsonReference(AttributeReference ar) {
-		String ft = null;
-		while (ar != null)
-		{
-			if (ar instanceof MemberAttributeReference)
-			{
-				if (ft == null)
-					ft = ((MemberAttributeReference) ar).getMember();
-				else
-					ft = ((MemberAttributeReference) ar).getMember()+"."+ft;
-			}
-			ar = ar.getParentReference();
-		}
-		return ft;
-	}
-
+	@SuppressWarnings("rawtypes")
 	protected void json2map(JSONObject jsonObject, Map<String,Object> map) throws JSONException 
 	{
 		for ( Iterator it = jsonObject.keys(); it.hasNext(); )
@@ -2117,6 +2053,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	@SuppressWarnings("rawtypes")
 	private void map2json(Map<String,Object> map, JSONObject jsonObject) throws JSONException 
 	{
 		for ( Iterator it = map.keySet().iterator(); it.hasNext(); )
@@ -2128,6 +2065,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		
 	}
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private Object java2json(Object javaObject) throws JSONException {
 		if (javaObject instanceof Map)
 		{
@@ -2193,10 +2131,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.parameters = mapping.getProperties().get(k).split("[, ]+");
 				else if (tag.equalsIgnoreCase("Template"))
 					im.template = mapping.getProperties().get(k);
-				else if (tag.equalsIgnoreCase("NotFound"))
-					im.notFound = mapping.getProperties().get(k);
-				else if (tag.equalsIgnoreCase("Avoid"))
-					im.avoid = mapping.getProperties().get(k);
 				else if (tag.toLowerCase().startsWith("header"))
 				{
 					String v = mapping.getProperties().get(k);
@@ -2289,6 +2223,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		debugObject(msg, obj, indent, "");
 	}
 	
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	void debugObject (String msg, Object obj, String indent, String attributeName)
 	{
 		if (debug)
