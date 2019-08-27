@@ -2163,29 +2163,31 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			if (existingObject == null)
 			{
 				boolean triggerRan = false;
+				ExtensibleObjects response = null;
 				for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
 				{
 					if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, soffidObject, targetObject, existingObject))
 					{
 						triggerRan = true;
-						invoke (m, targetObject, soffidObject);
+						response = invoke (m, targetObject, soffidObject);
 					}
+					if (triggerRan)
+						runTrigger(SoffidObjectTrigger.POST_INSERT, soffidObject, targetObject, existingObject, response);
 				}
-				if (triggerRan)
-					runTrigger(SoffidObjectTrigger.POST_INSERT, soffidObject, targetObject, existingObject);
 			}
 			else
 			{
 				boolean triggerRan = false;
+				ExtensibleObjects response = null;
 				for (InvocationMethod m: getMethods(targetObject.getObjectType(), "update"))
 				{
 					if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_UPDATE, soffidObject, targetObject, existingObject))
 					{
 						triggerRan = true;
-						invoke (m, targetObject, soffidObject);
+						response = invoke (m, targetObject, soffidObject);
 					}
 					if (triggerRan)
-						runTrigger(SoffidObjectTrigger.POST_UPDATE, soffidObject, targetObject, existingObject);
+						runTrigger(SoffidObjectTrigger.POST_UPDATE, soffidObject, targetObject, existingObject, response);
 				}
 			}
 		}
@@ -2301,10 +2303,20 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			ExtensibleObject newObject,
 			ExtensibleObject oldObject) throws InternalErrorException
 	{
+		return runTrigger (triggerType, soffidObject, newObject, oldObject, null);
+	}
+
+	protected boolean runTrigger (SoffidObjectTrigger triggerType,
+			ExtensibleObject soffidObject,
+			ExtensibleObject newObject,
+			ExtensibleObject oldObject,
+			ExtensibleObjects response) throws InternalErrorException
+	{
 		log.info("Testing trigger "+triggerType.toString());
 		log.info("  oldObjectType "+(oldObject == null ? "null": oldObject.getObjectType()));
 		log.info("  newObjectType "+(newObject == null ? "null": newObject.getObjectType()));
 		log.info("  soffidType    "+(soffidObject == null ? "null": soffidObject.getObjectType()));
+		log.info("  response      "+(response == null ? "null": response.toString()));
 		SoffidObjectType sot = SoffidObjectType.fromString(soffidObject.getObjectType());
 		for ( ExtensibleObjectMapping eom : objectTranslator.getObjectsBySoffidType(sot))
 		{
@@ -2321,6 +2333,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							eo.setAttribute("source", soffidObject);
 							eo.setAttribute("newObject", newObject);
 							eo.setAttribute("oldObject", oldObject);
+							eo.setAttribute("response", response);
 							if ( ! objectTranslator.evalExpression(eo, trigger.getScript()) )
 							{
 								log.info("Trigger "+triggerType+" returned false");
