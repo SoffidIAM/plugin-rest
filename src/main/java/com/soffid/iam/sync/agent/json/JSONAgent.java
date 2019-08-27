@@ -15,6 +15,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import javax.ws.rs.core.MediaType;
 import javax.xml.parsers.DocumentBuilder;
@@ -40,6 +41,8 @@ import org.apache.wink.common.http.HttpStatus;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONStringer;
+import org.json.JSONTokener;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
@@ -1674,6 +1677,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	private void parseJsonObject(InvocationMethod m, String path, String text, Map<String, Object> result)
 			throws InternalErrorException {
 		try {
+			text = text.trim();
 			if (text.startsWith("{"))
 			{
 				JSONObject respOb  = new JSONObject(text);
@@ -1687,8 +1691,15 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				result.putAll(map);
 				if (m != null && m.results == null) 
 					m.results = "result";
-			} else if (! text.isEmpty()) {
-				throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
+			} else
+			{
+				JSONTokener tokener = new JSONTokener(text);
+				if (tokener.more())
+					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
+				Object v = tokener.nextValue();
+				result.put("result", v);
+				if (tokener.more())
+					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
 			}
 		} catch (JSONException e) {
 			throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
