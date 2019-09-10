@@ -15,7 +15,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import javax.ws.rs.core.MediaType;
 import javax.xml.parsers.DocumentBuilder;
@@ -41,7 +40,6 @@ import org.apache.wink.common.http.HttpStatus;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONStringer;
 import org.json.JSONTokener;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -439,7 +437,17 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				}
 			}
 		}
-		
+		/*
+		log.info("\n\n\nTEST - LOG THE ACCOUNT GRANTS:");
+		for (RolGrant t: grants) {
+			if (t==null) {
+				log.info(">>> this is null");
+			} else {
+				log.info(">>> roleName: "+t.getRolName());
+			}
+		}
+		log.info("\nTEST - END\n\n\n");
+		*/
 		return grants;
 	}
 
@@ -559,9 +567,15 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 											.get("grantedRoles");
 									if (grantedRoles != null) {
 										for (Map<String, Object> grantedRole : grantedRoles) {
-											RolGrant grant = vom
-													.parseGrant(grantedRole);
-											grants.add(grant);
+											RolGrant grant = vom.parseGrant(grantedRole);
+											if (grant!=null && grant.getRolName()!=null && !grant.getRolName().trim().isEmpty()) {
+												if (debug)
+													log.info("tryAccountFetch 1 Soffid grant : "+grant.toString());
+												grants.add(grant);
+											} else {
+												if (debug)
+													log.warn("The grant has been SKIPPED, the grant is null, or its role name is null or empty or with spaces");
+											}
 										}
 										found = true;
 									}
@@ -574,6 +588,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 											grant.setRolName(grantedRole);
 											grant.setOwnerAccountName(accountName);
 											grant.setOwnerDispatcher(getCodi());
+											if (debug)
+												log.info("tryAccountFetch 2 Soffid grant : "+grant.toString());
 											grants.add(grant);
 										}
 										found = true;
@@ -688,11 +704,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 										if (debug)
 											debugObject("Parsed Soffid grant:", grantObject, "");
 										RolGrant grant = vom.parseGrant(grantObject);
-										if (grant != null)
+										if (grant!=null && grant.getRolName()!=null && !grant.getRolName().trim().isEmpty())
 										{
 											if (debug)
 												log.info("Soffid grant: "+grant.toString());
 											grants.add(grant);
+										} else {
+											if (debug)
+												log.warn("The grant has been SKIPPED, the grant is null, or its role name is null or empty or with spaces");
 										}
 									}
 								}
