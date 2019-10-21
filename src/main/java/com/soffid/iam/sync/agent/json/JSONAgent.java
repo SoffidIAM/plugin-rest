@@ -201,7 +201,12 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					for (InvocationMethod m: getMethods(mapping.getSystemObject(), "select"))
 					{
 						ExtensibleObject object = new ExtensibleObject();
-						ExtensibleObjects objects = invoke (m, object, null);
+						object.put("lastChange", lastChange);
+						object.setObjectType(mapping.getSoffidObject().toString());
+						ExtensibleObject target = objectTranslator.generateObject(object, mapping);
+						debugObject("Search base ", object, "  ");
+						debugObject("Translated object", target, "  ");
+						ExtensibleObjects objects = invoke (m, target, object);
 						if (objects != null)
 						{
 							for (ExtensibleObject eo: objects.getObjects())
@@ -1405,8 +1410,16 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException 
+	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException
 	{
+		PaginationStatus p = new PaginationStatus();
+		p.setAuto(true);
+		return invoke(m, object, sourceObject, p);
+	}
+	
+	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject, PaginationStatus pageStatus) throws InternalErrorException, JSONException 
+	{
+		pageStatus.setHasMore(false);
 		if ( sourceObject != null && m.condition != null && ! m.condition.trim().isEmpty())
 		{
 			if (! objectTranslator.evalExpression(sourceObject, m.condition))
@@ -1448,7 +1461,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					if ( "post".equalsIgnoreCase(m.method)) {
 						if (m.encoding == null)
 							m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
-						if (debug) debugObject("object: ",object,"  ");
+						if (debug) debugObject("post object: ",object,"  ");
 						String params = encode(m, object);
 						
 						if (debug)
@@ -1584,20 +1597,30 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							eos.getObjects().add(eo);
 						} 
 		
-						if (m.next != null && !m.next.isEmpty())
-						{
-							path = (String) objectTranslator.eval(m.next, resp);
-							if (path != null)
-							{
-								log.info("Jumping to next page: "+path);
-								repeat = true;
-								addParams = false;
-							}
-						}
 					}
 					else
 					{
 						eos.getObjects().add(resp);
+					}
+					if (m.next != null && !m.next.isEmpty())
+					{
+						path = (String) objectTranslator.eval(m.next, resp);
+						if (path != null)
+						{
+							log.info("Jumping to next page: "+path);
+							repeat = true;
+							addParams = false;
+						}
+					} else if (m.pagination != null && ! m.pagination.isEmpty())
+					{
+						log.info("Testing pagination");
+						ExtensibleObject o = new ExtensibleObject();
+						o.put("request", object);
+						o.put("sourceObject", sourceObject);
+						o.put("response", resp);
+						Object p = objectTranslator.eval(m.pagination, o);
+						repeat = Boolean.TRUE.equals(p);
+						log.info("Pagination script returned "+repeat);
 					}
 				}
 			} catch (ClientWebException e) {
@@ -1607,6 +1630,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			} catch (ClientRuntimeException e) {
 				createClient();
 				throw e;
+			}
+			if (repeat && ! pageStatus.isAuto())
+			{
+				repeat = false;
+				pageStatus.setHasMore(true);
 			}
 		} while (repeat);
 		return eos;
@@ -2142,6 +2170,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.check = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Next"))
 					im.next = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("Pagination"))
+					im.pagination = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Method"))
 					im.method = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Encoding"))
