@@ -2041,7 +2041,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		for ( Iterator it = jsonObject.keys(); it.hasNext(); )
 		{
 			String key = (String) it.next();
-			Object value = jsonObject.get(key);
+			Object value = jsonObject.isNull(key) ? null: jsonObject.get(key);
 			map.put(key, json2java(value));
 		}
 		
