@@ -11,6 +11,7 @@ public class InvocationMethod
 	public String results;
 	public String check;
 	public String next;
+	public String pagination;
 	public String template;
 	public String condition;
 	public String[] parameters;

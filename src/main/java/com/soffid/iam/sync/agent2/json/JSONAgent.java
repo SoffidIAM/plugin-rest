@@ -3,12 +3,14 @@ package com.soffid.iam.sync.agent2.json;
 import java.rmi.RemoteException;
 import java.util.Collection;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 
 import org.json.JSONException;
 
 import com.soffid.iam.api.CustomObject;
 import com.soffid.iam.sync.agent.json.InvocationMethod;
+import com.soffid.iam.sync.agent.json.PaginationStatus;
 import com.soffid.iam.sync.intf.CustomObjectMgr;
 
 import es.caib.seycon.ng.comu.SoffidObjectType;
@@ -134,36 +136,50 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 		}
 	}
 
+	class SearchItem {
+		ExtensibleObjectMapping mapping;
+		ExtensibleObject srcObject;
+		ExtensibleObject target;
+		boolean started;
+		boolean finished;
+		public InvocationMethod method;
+	}
+	List<SearchItem> searchItems = null;
 	boolean moreData = false;
 	String nextChange = null;
+	
 	@SuppressWarnings("unchecked")
 	public Collection<AuthoritativeChange> getChanges(String lastChange)
 			throws InternalErrorException {
+		if (searchItems == null)
+		{
+			populateSearchItems(lastChange);
+		}
 		LinkedList<AuthoritativeChange> changes = new LinkedList<AuthoritativeChange>();
 		
 		try {
-			for (ExtensibleObjectMapping mapping: objectMappings)
+			for (SearchItem searchItem: searchItems)
 			{
-				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_CUSTOM) ||
-						mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_USER) ||
-						mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_AUTHORITATIVE_CHANGE) ||
-						mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GROUP)
-						)
+				if (! searchItem.finished)
 				{
-					for (InvocationMethod m: getMethods(mapping.getSystemObject(), "load"))
+					PaginationStatus p = new PaginationStatus();
+					p.setAuto(false);
+					ExtensibleObjects objects = invoke (searchItem.method, searchItem.target, searchItem.srcObject, p);
+					if (objects != null)
 					{
-						ExtensibleObject object = new ExtensibleObject();
-						object.setObjectType(mapping.getSystemObject().toString());
-						ExtensibleObjects objects = invoke (m, object, null);
-						if (objects != null)
+						for (ExtensibleObject eo: objects.getObjects())
 						{
-							for (ExtensibleObject eo: objects.getObjects())
-							{
-								ExtensibleObject soffidUser = objectTranslator.parseInputObject(eo, mapping);
-								AuthoritativeChange ch = vom.parseAuthoritativeChange(soffidUser);
-								if (ch != null)
-									changes.add(ch);
-							}
+							ExtensibleObject soffidUser = objectTranslator.parseInputObject(eo, searchItem.mapping);
+							AuthoritativeChange ch = vom.parseAuthoritativeChange(soffidUser);
+							if (ch != null)
+								changes.add(ch);
+						}
+						if ( ! p.isHasMore())
+							searchItem.finished = true;
+						if ( ! changes.isEmpty())
+						{
+							moreData = true;
+							return changes;
 						}
 					}
 				}
@@ -174,6 +190,34 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 			throw new InternalErrorException ("Error processing request", e);
 		}
 	}
+
+	private void populateSearchItems(String lastChange) throws InternalErrorException {
+		searchItems = new LinkedList<JSONAgent.SearchItem>();
+		for (ExtensibleObjectMapping mapping: objectMappings)
+		{
+			if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_CUSTOM) ||
+					mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_USER) ||
+					mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_AUTHORITATIVE_CHANGE) ||
+					mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GROUP)
+					)
+			{
+				for (InvocationMethod m: getMethods(mapping.getSystemObject(), "load"))
+				{
+					SearchItem searchItem = new SearchItem();
+					searchItem.started = false;
+					searchItem.finished = false;
+					searchItem.mapping = mapping;
+					searchItem.method = m;
+					searchItem.srcObject = new ExtensibleObject();
+					searchItem.srcObject.put("lastChange", lastChange);
+					searchItem.srcObject.setObjectType(mapping.getSoffidObject().toString());
+					searchItem.target = objectTranslator.generateObject(searchItem.srcObject, mapping);
+					searchItems.add(searchItem);
+				}
+			}
+		}
+	}
+
 
 	public String getNextChange() throws InternalErrorException {
 		return nextChange;
