@@ -815,6 +815,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							for (RolGrant grant: grants)
 							{
 								grant.setOwnerAccountName(accountName);
+								grant.setOwnerDispatcher(getCodi());
+								grant.setDispatcher(getCodi());
 								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
 								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
 								boolean triggerRan = false;
@@ -1466,7 +1468,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						
 						if (debug)
 							log.info("Invoking POST on "+path+": "+params);
-						
+						if (params == null)
+							request.header("Content-Length", "0" );
 						response = request.post(params);
 					} else if ( "put".equalsIgnoreCase(m.method))  {
 						if (m.encoding == null)
@@ -1476,6 +1479,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						if (debug)
 							log.info("Invoking PUT on "+path+": "+params);
 
+						if (params == null)
+							request.header("Content-Length", "0" );
 						response = request.put(params);
 					} else if ( "delete".equalsIgnoreCase(m.method)) {
 						if (m.encoding == null)
@@ -1496,27 +1501,21 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						if (debug)
 							log.info("Invoking "+m.method+" on "+path+": "+params);
 
+						if (params == null)
+							request.header("Content-Length", "0" );
+
 						response = request.invoke(m.method, ClientResponse.class, params);
 					}
 				}
 
+				checkSuccess(m, response);
+				
 				if (response.getStatusCode() == HttpStatus.NOT_FOUND.getCode())
 				{
 					response.consumeContent();
 					return null;
 				}
-				if (response.getStatusCode() != HttpStatus.OK.getCode() &&
-						response.getStatusCode() != HttpStatus.CREATED.getCode() &&
-						response.getStatusCode() != HttpStatus.NO_CONTENT.getCode())
-				{
-					String text = response.getEntity(String.class);
-					String message = response.getMessage();
-					String UIMessage = "Error on invocation: "+message+"\n"+text;
-					if (debug) log.info(UIMessage);
-					int max = (UIMessage.length()>800) ? 800 : UIMessage.length();
-					throw new InternalErrorException(UIMessage.substring(0, max));
-				}
-		
+				
 				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
 				{
 					if (debug)
@@ -1554,7 +1553,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						if (debug)
 							log.info("Parsing results");
 						Object result = objectTranslator.eval(m.results, resp);
-						if (result instanceof Iterable)
+						if (result == null)
+						{
+							// Nothing to do
+						}
+						else if (result instanceof Iterable)
 						{
 							for (Object o: ((Iterable) result))
 							{
@@ -1584,7 +1587,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 								eos.getObjects().add(eo);
 							}
 						}
-						else if (result != null)
+						else
 						{
 							ExtensibleObject eo = new ExtensibleObject();
 							eo.setObjectType(object.getObjectType());
@@ -1640,6 +1643,47 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return eos;
 	}
 
+	public void checkSuccess(InvocationMethod m, ClientResponse response) throws InternalErrorException {
+		boolean success;
+		if (m.successCodes != null)
+		{
+			success = false;
+			for (String code: m.successCodes)
+				if (code.equals( Integer.toString(response.getStatusCode())))
+				{
+					success = true;
+					break;
+				}
+		}
+		else if (m.failureCodes != null)
+		{
+			success = true;
+			for (String code: m.failureCodes)
+				if (code.equals( Integer.toString(response.getStatusCode())))
+				{
+					success = false;
+					break;
+				}
+		}
+		else
+		{
+			success = response.getStatusCode() == HttpStatus.OK.getCode() ||
+				response.getStatusCode() == HttpStatus.NOT_FOUND.getCode() ||
+				response.getStatusCode() == HttpStatus.CREATED.getCode() ||
+				response.getStatusCode() == HttpStatus.NO_CONTENT.getCode() ;
+		}
+		
+		if ( ! success)
+		{
+			String text = response.getEntity(String.class);
+			String UIMessage = "Error on invocation: "+response.getStatusCode()+" "+response.getMessage()+"\n"+text;
+			if (debug) log.info(UIMessage);
+			int max = (UIMessage.length()>800) ? 800 : UIMessage.length();
+			throw new InternalErrorException(UIMessage.substring(0, max));
+			
+		}
+	}
+
 	private void parseXmlObject(InvocationMethod m, String path, byte[] r, Map<String, Object> resp) throws InternalErrorException {
 		try {
 			// Add header if needed
@@ -1679,6 +1723,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			{
 				if (child instanceof Element)
 					parseXmlEntity((Element) child, r);
+				else if (child instanceof Text)
+				{
+					Object value = r.get("value");
+					if (value == null)
+						r.put("value", child.getTextContent());
+					else
+						r.put("value", value.toString()+child.getTextContent());
+				}
 				child = child.getNextSibling();
 			}
 			NamedNodeMap atts = entity.getAttributes();
@@ -1731,22 +1783,30 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				Map<String, Object> map = new HashMap<String, Object>();
 				json2map(respOb, map );
 				result.putAll(map);
-			} else if (text.startsWith("[")) {
+			} 
+			else if (text.startsWith("[")) 
+			{
 				JSONArray respOb  = new JSONArray(text);
 				Map<String, Object> map = new HashMap<String, Object>();
 				map.put("result", json2java(respOb));
 				result.putAll(map);
 				if (m != null && m.results == null) 
 					m.results = "result";
-			} else
+			} 
+			else
 			{
 				JSONTokener tokener = new JSONTokener(text);
-				if (tokener.more())
-					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
-				Object v = tokener.nextValue();
-				result.put("result", v);
-				if (tokener.more())
-					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
+				if (!tokener.more())
+				{
+					result.put("result", null);
+				}
+				else
+				{
+					Object v = tokener.nextValue();
+					result.put("result", v);
+					if (tokener.more())
+						throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
+				}
 			}
 		} catch (JSONException e) {
 			throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
@@ -2164,6 +2224,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					im.path = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Results"))
 					im.results = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("SuccessCodes"))
+					im.successCodes = mapping.getProperties().get(k).split(" +");
+				else if (tag.equalsIgnoreCase("FailureCodes"))
+					im.failureCodes = mapping.getProperties().get(k).split(" +");
 				else if (tag.equalsIgnoreCase("Condition"))
 					im.condition = mapping.getProperties().get(k);
 				else if (tag.equalsIgnoreCase("Check"))
