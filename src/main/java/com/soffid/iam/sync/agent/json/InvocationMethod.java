@@ -16,4 +16,6 @@ public class InvocationMethod
 	public String condition;
 	public String[] parameters;
 	public List<String[]> headers;
+	public String[] failureCodes;
+	public String[] successCodes;
 }
