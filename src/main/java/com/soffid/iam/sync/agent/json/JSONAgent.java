@@ -1113,13 +1113,16 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					ExtensibleObjects objects = loadJsonObjects(eo, null);
 					
 					if (objects == null)
-						throw new InternalErrorException("No roles found");
-					for ( ExtensibleObject object : objects.getObjects())
 					{
-						String name = vom.toSingleString(objectTranslator.parseInputAttribute("name", object, mapping));
-						if (name != null)
+						log.warn("No roles found");
+					} else {
+						for ( ExtensibleObject object : objects.getObjects())
 						{
-							accounts.add(name);
+							String name = vom.toSingleString(objectTranslator.parseInputAttribute("name", object, mapping));
+							if (name != null)
+							{
+								accounts.add(name);
+							}
 						}
 					}
 				}
@@ -1578,7 +1581,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 								eos.getObjects().add(eo);
 							}
 						}
-						else if (result.getClass().isArray())
+						else if (result != null && result.getClass().isArray())
 						{
 							for (Object o: ((Object[]) result))
 							{
