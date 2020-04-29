@@ -16,6 +16,23 @@
 		]]>
 		</attribute>
 		<zscript><![CDATA[
+		    pageScope.put("methodDescriptor", new String[][] {
+					new String[] {"Path", "* Path", "url", "Path relative to the agent base URL"},
+					new String[] {"Method", "* Method", "text", "Use either GET / POST / PUT / PATCH / DELETE"},
+					new String[] {"Encoding", "* Encoding", "text", "Use text/xml or application/json"},
+					new String[] {"Template", "XML Template", "", "Use an XML template used to generate the request. Edit the list of templates from the previous tab"},
+					new String[] {"Params", "Parameters", "text", "Space separated list of parameters to send. To be ignored with XML templates"},
+					new String[] {"SuccessCodes", "Success HTTP Codes", "string", "HTTP codes considered as success (separated by blanks). Usually 200"},
+					new String[] {"FailureCodes", "Failure HTTP Codes", "string", "HTTP codes considered as failure (separated by blanks). Usually 500"},
+					new String[] {"Results", "Results", "beanshell", "This script will received the parsed response. It must return a list of objects extracted from the result"},
+					new String[] {"Next", "Pagination URL", "beanshell", "Script that returns the URL for the next page of results. Use it with simple get requests"},
+					new String[] {"Pagination", "Pagination script", "beanshell", "Script that returns true when a new page of results is required. Use it with complex requests"},
+					new String[] {"Condition", "Condition script", "beanshell", "Script that returns false when this method should be skipped"},
+					new String[] {"Header", "Optional header"},
+					new String[] {"Header2", "Optional header"},
+					new String[] {"Header3", "Optional header"}
+			});
+
 			org.zkoss.zk.ui.event.EventListener editTemplate = new EventListener ()
 			{
 				public void onEvent(Event ev) {
