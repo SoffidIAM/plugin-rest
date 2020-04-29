@@ -142,7 +142,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		authUrl = getDispatcher().getParam3();
 		serverUrl = getDispatcher().getParam4();
 		body = getDispatcher().getParam5();
-		authUrl = getDispatcher().getParam7();
+		tokenAttribute = getDispatcher().getParam7();
 		debug = "true".equals(getDispatcher().getParam8());
 
 		try {
