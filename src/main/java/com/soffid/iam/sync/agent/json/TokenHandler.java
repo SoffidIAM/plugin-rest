@@ -1,13 +1,13 @@
 package com.soffid.iam.sync.agent.json;
 
 import java.net.URLEncoder;
-import java.util.LinkedList;
 import java.util.List;
 
 import javax.ws.rs.core.MediaType;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.wink.client.ClientAuthenticationException;
 import org.apache.wink.client.ClientConfig;
 import org.apache.wink.client.ClientRequest;
@@ -18,22 +18,22 @@ import org.apache.wink.client.handlers.AbstractAuthSecurityHandler;
 import org.apache.wink.client.handlers.BasicAuthSecurityHandler;
 import org.apache.wink.client.handlers.ClientHandler;
 import org.apache.wink.client.handlers.HandlerContext;
+import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.apache.wink.common.http.HttpStatus;
-import org.apache.wink.common.internal.i18n.Messages;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-public class TokenHandler extends AbstractAuthSecurityHandler implements
-		ClientHandler {
-	String authURL;
-	String authToken;
+public class TokenHandler extends AbstractAuthSecurityHandler implements ClientHandler {
 
 	Log logger = LogFactory.getLog(getClass());
+
 	private String password;
 	private String user;
-	
 	private String basicUser;
 	private String basicPassword;
+	private String authURL;
+	private String authToken;
+	private DefaultHttpClient httpClient;
 
 	public String getBasicUser() {
 		return basicUser;
@@ -51,21 +51,23 @@ public class TokenHandler extends AbstractAuthSecurityHandler implements
 		this.basicPassword = basicPassword;
 	}
 
-	public TokenHandler ( String authURL, String user, String password)
+	public TokenHandler ( String authURL, String user, String password, DefaultHttpClient httpClient)
 	{
 		this.authURL = authURL;
 		this.user = user;
 		this.password = password;
+		this.httpClient = httpClient;
 	}
 	
 	private void getAuthToken () throws JSONException
 	{
-		ClientConfig config = new ClientConfig();
+		ClientConfig config = new ApacheHttpClientConfig(httpClient);
 		if (basicUser != null && basicPassword != null)
 			config.handlers(new BasicAuthSecurityHandler(basicUser, basicPassword));
 		
 		RestClient client = new RestClient(config);
 		Resource rsc = client.resource(authURL);
+		@SuppressWarnings("deprecation")
 		ClientResponse response = rsc
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.accept(MediaType.APPLICATION_JSON)

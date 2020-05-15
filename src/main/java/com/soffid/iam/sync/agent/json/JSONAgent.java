@@ -3,6 +3,9 @@ package com.soffid.iam.sync.agent.json;
 import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.Proxy.Type;
 import java.net.URLEncoder;
 import java.rmi.RemoteException;
 import java.util.Collection;
@@ -30,6 +33,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientRuntimeException;
 import org.apache.wink.client.ClientWebException;
@@ -104,6 +108,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	String contentType;
 	String body;
 	String tokenAttribute;
+	private int proxyPort;
+	private String proxyHost;
 
 	protected Collection<ExtensibleObjectMapping> objectMappings;
 	private ApacheHttpClientConfig config;
@@ -163,32 +169,53 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						templates.put(name, template);
 					}
 				}
+				this.proxyHost = json.optString("proxyHost");
+				if (proxyHost != null && !proxyHost.trim().isEmpty())
+				{
+					this.proxyPort = Integer.parseInt(json.optString("proxyPort"));
+				}
 			}
 		} catch (UnsupportedEncodingException e) {
 			throw new InternalErrorException("Error parsing templates", e);
 		} catch (JSONException e) {
 			throw new InternalErrorException("Error parsing templates", e);
 		}
-		
+
+		log.info(">>> proxyHost: "+proxyHost);
+		log.info(">>> proxyPort: "+proxyPort);
 		createClient();
 	}
 
 	protected void createClient() {
-		// create a client to send the user/group crud requests
-		config = new ApacheHttpClientConfig(new DefaultHttpClient());
+
+		DefaultHttpClient httpClient = new DefaultHttpClient();
+		DefaultHttpClient httpClient2 = new DefaultHttpClient();
+		if (proxyHost != null && !proxyHost.trim().isEmpty())
+		{
+			Proxy proxy = new Proxy(Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+			log.info("Using proxy "+proxy);
+			ProxySelectorRoutePlanner planner = new ProxySelectorRoutePlanner(httpClient.getConnectionManager().getSchemeRegistry(),
+					new ProxySelector(proxy));
+			httpClient.setRoutePlanner(planner);
+			httpClient2.setRoutePlanner(planner);
+		} else {
+			log.info("Using direct connection");
+		}
+		config = new ApacheHttpClientConfig(httpClient);
+
 		if ("token".equals(authMethod))
 		{
-			TokenHandler handler = new TokenHandler (authUrl, loginDN, password.getPassword());
+			TokenHandler handler = new TokenHandler (authUrl, loginDN, password.getPassword(), httpClient2);
 			config.handlers(handler);
 		}
 		if ("basic".equals(authMethod))
 		{
-			BasicAuthSecurityHandler handler = new BasicAuthSecurityHandler(loginDN, password.getPassword());
+			BasicAuthSecurityHandler handler = new BasicAuthSecurityHandler(loginDN, password.getPassword(), httpClient2);
 			config.handlers(handler);
 		}
 		if ("tokenOAuthCC".equals(authMethod))
 		{
-			TokenHandlerOAuthCC handler = new TokenHandlerOAuthCC(authUrl, body, tokenAttribute);
+			TokenHandlerOAuthCC handler = new TokenHandlerOAuthCC(authUrl, body, tokenAttribute, httpClient2);
 			config.handlers(handler);
 		}
 		config.setChunked(false);
@@ -1421,7 +1448,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
-	@SuppressWarnings({ "rawtypes", "unchecked" })
 	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException
 	{
 		PaginationStatus p = new PaginationStatus();
@@ -1429,6 +1455,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return invoke(m, object, sourceObject, p);
 	}
 	
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject, PaginationStatus pageStatus) throws InternalErrorException, JSONException 
 	{
 		pageStatus.setHasMore(false);

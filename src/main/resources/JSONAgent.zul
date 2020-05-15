@@ -5,7 +5,7 @@
 <?component name="input_password" macro-uri="comu/input_password.zul"?>
 
 <div id="xmlAgentTop">
-	<grid width="99%">
+	<grid width="99%" id="configurationGrid">
 		<attribute name='onCreate'>
 		<![CDATA[
 	    try {
@@ -16,6 +16,10 @@
 		]]>
 		</attribute>
 		<zscript><![CDATA[
+            String[] attributes = new String[] {
+         		"proxyHost",
+         		"proxyPort"
+            };
 		    pageScope.put("methodDescriptor", new String[][] {
 					new String[] {"Path", "* Path", "url", "Path relative to the agent base URL"},
 					new String[] {"Method", "* Method", "text", "Use either GET / POST / PUT / PATCH / DELETE"},
@@ -88,8 +92,26 @@
 							}
 						}
 					}
+					for (String attribute: attributes) {
+						Component c = configurationGrid.getFellowIfAny (attribute);
+						if (c != null)
+						{
+							String v = json.optString(attribute);
+							if (c instanceof Listbox)
+							{
+								c.setSelectedItem(null);
+								for ( item: c.getItems()) {
+									if (item.getValue() != null && item.getValue().equals(v))
+										c.setSelectedItem ( item );
+								}
+							}
+							else
+								c.setValue ( v );
+						}
+					}
 				}
 		    }
+
 			void updateBlob () {
 				byte[] data = es.caib.zkib.datasource.XPathUtils.getValue(xmlAgentTop,"blobParam");
 				org.json.JSONObject json;
@@ -113,6 +135,22 @@
 					templates.put(ob);
 				}
 				json.put("templates", templates); 
+
+				for ( String attribute: attributes)
+				{
+					Component item = configurationGrid.getFellow (attribute);
+					String v = null;
+					if (item instanceof Listbox)
+					{
+						if (item.getSelectedItem() != null)
+							v = item.getSelectedItem().getValue();
+					}
+					else
+						v = item.getValue();
+					if ( v != null)
+						json.put(attribute, v);
+				}
+
 				String t = json.toString();
 				es.caib.zkib.datasource.XPathUtils.setValue(self,"blobParam", t.getBytes("UTF-8"));
 			}
@@ -267,6 +305,18 @@
 						<listcell label="Yes"/>
 					</listitem>
 				</listbox>
+			</row>
+			<row >
+				<input_etiqueta value="Proxy host" />
+				<hbox width="90%">
+					<textbox width="98%" id="proxyHost" onChange="updateBlob()"/>
+				</hbox>
+			</row>
+			<row>
+				<input_etiqueta value="Proxy port" />
+				<hbox width="90%">
+					<textbox width="98%" id="proxyPort" onChange="updateBlob()"/>
+				</hbox>
 			</row>
 			<row>
 				<input_etiqueta value="XML Templates" />

@@ -6,6 +6,7 @@ import javax.ws.rs.core.MediaType;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.wink.client.ClientAuthenticationException;
 import org.apache.wink.client.ClientConfig;
 import org.apache.wink.client.ClientRequest;
@@ -15,6 +16,7 @@ import org.apache.wink.client.RestClient;
 import org.apache.wink.client.handlers.AbstractAuthSecurityHandler;
 import org.apache.wink.client.handlers.ClientHandler;
 import org.apache.wink.client.handlers.HandlerContext;
+import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.apache.wink.common.http.HttpStatus;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -27,12 +29,14 @@ public class TokenHandlerOAuthCC extends AbstractAuthSecurityHandler implements 
 	private String body;
 	private String tokenAttribute;
 	private String authToken;
+	private DefaultHttpClient httpClient;
 
-	public TokenHandlerOAuthCC(String tokenURL, String body, String tokenAttribute) {
+	public TokenHandlerOAuthCC(String tokenURL, String body, String tokenAttribute, DefaultHttpClient httpClient) {
 		this.tokenURL = tokenURL;
 		this.body = body;
 		this.tokenAttribute = tokenAttribute;
 		this.authToken = null;
+		this.httpClient = httpClient;
 	}
 
 	public ClientResponse handle(ClientRequest request, HandlerContext context) throws Exception {
@@ -55,7 +59,7 @@ public class TokenHandlerOAuthCC extends AbstractAuthSecurityHandler implements 
 	private void getAuthToken() throws JSONException {
 
 		System.out.println("TokenHandlerPOSTBody.getAuthToken()");
-		ClientConfig config = new ClientConfig();
+		ClientConfig config = new ApacheHttpClientConfig(httpClient);
 		RestClient client = new RestClient(config);
 		Resource rsc = client.resource(tokenURL);
 		ClientResponse response = rsc
