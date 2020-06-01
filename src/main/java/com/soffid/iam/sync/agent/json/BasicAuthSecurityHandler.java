@@ -1,13 +1,11 @@
 package com.soffid.iam.sync.agent.json;
 
-import org.apache.wink.client.ClientAuthenticationException;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.wink.client.ClientRequest;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.handlers.AbstractAuthSecurityHandler;
 import org.apache.wink.client.handlers.ClientHandler;
 import org.apache.wink.client.handlers.HandlerContext;
-import org.apache.wink.common.http.HttpStatus;
-import org.apache.wink.common.internal.i18n.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,13 +13,11 @@ public class BasicAuthSecurityHandler extends AbstractAuthSecurityHandler implem
 
     private static Logger    logger       = LoggerFactory.getLogger(BasicAuthSecurityHandler.class);
 
-    private static final int UNAUTHORIZED = HttpStatus.UNAUTHORIZED.getCode();
-
     public BasicAuthSecurityHandler() {
         /* do nothing */
     }
 
-    public BasicAuthSecurityHandler(final String username, final String password) {
+    public BasicAuthSecurityHandler(final String username, final String password, DefaultHttpClient httpClient) {
         super(username, password);
     }
 

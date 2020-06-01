@@ -3,6 +3,9 @@ package com.soffid.iam.sync.agent.json;
 import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.Proxy.Type;
 import java.net.URLEncoder;
 import java.rmi.RemoteException;
 import java.util.Collection;
@@ -30,6 +33,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientRuntimeException;
 import org.apache.wink.client.ClientWebException;
@@ -46,6 +50,9 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.Text;
+
+import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuth;
+import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuthImpl;
 
 import es.caib.seycon.ng.comu.Account;
 import es.caib.seycon.ng.comu.Grup;
@@ -102,8 +109,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	String authUrl;
 	String scimVersion;
 	String contentType;
-	String body;
 	String tokenAttribute;
+	private int proxyPort;
+	private String proxyHost;
 
 	protected Collection<ExtensibleObjectMapping> objectMappings;
 	private ApacheHttpClientConfig config;
@@ -111,6 +119,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	private static final int MAX_LOG = 1000;
 	boolean grantsInRole = false;
 	Map<String,Set<String>> userRoles = new HashMap<String, Set<String>>();
+	Map<String, String> templates = new HashMap<String, String>();
+	Map<String, String> oauthParams = new HashMap<String, String>();
 
 	/**
 	 * Constructor
@@ -124,7 +134,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	public JSONAgent() throws RemoteException {
 	}
 
-	Map<String, String> templates = new HashMap<String, String>();
 	@Override
 	public void init() throws InternalErrorException {
 		log.info("Starting REST agent on {}", getDispatcher().getCodi(), null);
@@ -141,7 +150,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		authMethod = getDispatcher().getParam2();
 		authUrl = getDispatcher().getParam3();
 		serverUrl = getDispatcher().getParam4();
-		body = getDispatcher().getParam5();
 		tokenAttribute = getDispatcher().getParam7();
 		debug = "true".equals(getDispatcher().getParam8());
 
@@ -152,16 +160,37 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				org.json.JSONTokener tokener = new org.json.JSONTokener( t);
 				org.json.JSONObject json = new org.json.JSONObject(tokener);
 				org.json.JSONArray templatesJson = json.optJSONArray("templates");
-				for ( int i = 0; i < templatesJson.length(); i++)
-				{
-					org.json.JSONObject s = templatesJson.getJSONObject(i);
-					String name = s.optString("name");
-					String template = s.optString("template");
-					if (name != null && !name.isEmpty() &&
-						template != null && !template.isEmpty())
+				org.json.JSONArray oauthParamsJson = json.optJSONArray("oauthParams");
+				
+				if(templatesJson != null) {
+					for ( int i = 0; i < templatesJson.length(); i++)
 					{
-						templates.put(name, template);
+						org.json.JSONObject s = templatesJson.getJSONObject(i);
+						String name = s.optString("name");
+						String template = s.optString("template");
+						if (name != null && !name.isEmpty() &&
+							template != null && !template.isEmpty())
+						{
+							templates.put(name, template);
+						}
 					}
+				}
+				
+				if(oauthParamsJson != null) {
+					for ( int i=0; i < oauthParamsJson.length(); i++) {
+						org.json.JSONObject s = oauthParamsJson.getJSONObject(i);
+						String oauthParam = s.optString("oauthParam");
+						String oauthValue = s.optString("oauthValue");
+						if (oauthParam != null && !oauthParam.isEmpty())
+						{
+							oauthParams.put(oauthParam, oauthValue);
+						}
+					}
+				}
+				this.proxyHost = json.optString("proxyHost");
+				if (proxyHost != null && !proxyHost.trim().isEmpty())
+				{
+					this.proxyPort = Integer.parseInt(json.optString("proxyPort"));
 				}
 			}
 		} catch (UnsupportedEncodingException e) {
@@ -169,26 +198,43 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		} catch (JSONException e) {
 			throw new InternalErrorException("Error parsing templates", e);
 		}
-		
+
+		log.info(">>> proxyHost: "+proxyHost);
+		log.info(">>> proxyPort: "+proxyPort);
 		createClient();
 	}
 
 	protected void createClient() {
-		// create a client to send the user/group crud requests
-		config = new ApacheHttpClientConfig(new DefaultHttpClient());
+
+		DefaultHttpClient httpClient = new DefaultHttpClient();
+		DefaultHttpClient httpClient2 = new DefaultHttpClient();
+		if (proxyHost != null && !proxyHost.trim().isEmpty())
+		{
+			Proxy proxy = new Proxy(Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+			log.info("Using proxy "+proxy);
+			ProxySelectorRoutePlanner planner = new ProxySelectorRoutePlanner(httpClient.getConnectionManager().getSchemeRegistry(),
+					new ProxySelector(proxy));
+			httpClient.setRoutePlanner(planner);
+			httpClient2.setRoutePlanner(planner);
+		} else {
+			log.info("Using direct connection");
+		}
+		config = new ApacheHttpClientConfig(httpClient);
+
 		if ("token".equals(authMethod))
 		{
-			TokenHandler handler = new TokenHandler (authUrl, loginDN, password.getPassword());
+			TokenHandler handler = new TokenHandler (authUrl, loginDN, password.getPassword(), httpClient2);
 			config.handlers(handler);
 		}
 		if ("basic".equals(authMethod))
 		{
-			BasicAuthSecurityHandler handler = new BasicAuthSecurityHandler(loginDN, password.getPassword());
+			BasicAuthSecurityHandler handler = new BasicAuthSecurityHandler(loginDN, password.getPassword(), httpClient2);
 			config.handlers(handler);
 		}
-		if ("tokenOAuthCC".equals(authMethod))
+		if ("tokenOAuthCC".equals(authMethod)
+				|| "tokenOAuthPG".equals(authMethod))
 		{
-			TokenHandlerOAuthCC handler = new TokenHandlerOAuthCC(authUrl, body, tokenAttribute);
+			TokenHandlerOAuthCC handler = new TokenHandlerOAuthCC(authUrl, body, tokenAttribute, httpClient2);
 			config.handlers(handler);
 		}
 		config.setChunked(false);
@@ -1421,7 +1467,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return null;
 	}
 
-	@SuppressWarnings({ "rawtypes", "unchecked" })
 	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException, JSONException
 	{
 		PaginationStatus p = new PaginationStatus();
@@ -1429,6 +1474,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return invoke(m, object, sourceObject, p);
 	}
 	
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	protected ExtensibleObjects invoke(InvocationMethod m, ExtensibleObject object, ExtensibleObject sourceObject, PaginationStatus pageStatus) throws InternalErrorException, JSONException 
 	{
 		pageStatus.setHasMore(false);
@@ -1440,12 +1486,12 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				return null;
 			}
 		}
-		String path = translatePath (m, object);
 		boolean repeat = false;
 		boolean addParams = true;
 		ExtensibleObjects eos = new ExtensibleObjects();
 		do
 		{
+			String path = translatePath (m, object);
 			repeat = false;
 			try
 			{
@@ -1482,7 +1528,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response = request.post(params);
 					} else if ( "put".equalsIgnoreCase(m.method))  {
 						if (m.encoding == null)
-							m.method = MediaType.APPLICATION_FORM_URLENCODED;
+							m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
 						String params = encode(m, object);
 
 						if (debug)
@@ -1491,7 +1537,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response = request.put(params);
 					} else if ( "delete".equalsIgnoreCase(m.method)) {
 						if (m.encoding == null)
-							m.method = MediaType.APPLICATION_FORM_URLENCODED;
+							m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
 						String params = encode(m, object);
 						if (params != null && ! params.isEmpty())
 							path = path +"?"+params;
@@ -1502,7 +1548,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						response = request.delete();
 					} else {
 						if (m.encoding == null)
-							m.method = MediaType.APPLICATION_FORM_URLENCODED;
+							m.encoding = MediaType.APPLICATION_FORM_URLENCODED;
 						String params = encode(m, object);
 
 						if (debug)
@@ -1526,6 +1572,15 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					if (debug)
 						log.info("No content received");
 				}
+				
+				if (response.getStatusCode() == HttpStatus.UNAUTHORIZED.getCode())
+				{
+					if (!client.getConfig().getHandlers().isEmpty()
+							&& client.getConfig().getHandlers().get(0) instanceof TokenHandlerOAuth) {
+						createClient();
+					}
+				}	
+				
 				else
 				{
 					String mimeType = response.getHeaders().getFirst("Content-Type");
@@ -1678,7 +1733,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 		
 		if ( ! success)
-		{
+		{			
 			String text = response.getEntity(String.class);
 			String UIMessage = "Error on invocation: "+response.getStatusCode()+" "+response.getMessage()+"\n"+text;
 			if (debug) log.info(UIMessage);

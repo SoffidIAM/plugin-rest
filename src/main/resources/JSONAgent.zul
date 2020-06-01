@@ -5,17 +5,30 @@
 <?component name="input_password" macro-uri="comu/input_password.zul"?>
 
 <div id="xmlAgentTop">
-	<grid width="99%">
+	<grid width="99%" id="configurationGrid">
 		<attribute name='onCreate'>
 		<![CDATA[
 	    try {
 	    	updateGrid ();
+	    	manageAttributesForAuthType ();
 	    } catch (Exception e) {
 	    	
 	    }
 		]]>
 		</attribute>
 		<zscript><![CDATA[
+		
+			String[] oauthParams = new String[] {
+					"grant_type",
+       				"client_id",
+       				"client_secret",
+       				"scope"
+       		};
+       					
+            String[] attributes = new String[] {
+         		"proxyHost",
+         		"proxyPort"
+            };
 		    pageScope.put("methodDescriptor", new String[][] {
 					new String[] {"Path", "* Path", "url", "Path relative to the agent base URL"},
 					new String[] {"Method", "* Method", "text", "Use either GET / POST / PUT / PATCH / DELETE"},
@@ -52,7 +65,7 @@
 					updateBlob();
 				}
 			};
-	
+
 			void updateGrid () {
 				byte[] data = es.caib.zkib.datasource.XPathUtils.getValue( xmlAgentTop ,"blobParam");
 				if (data != null)
@@ -88,8 +101,43 @@
 							}
 						}
 					}
+					
+					org.json.JSONArray oauthJson = json.optJSONArray("oauthParams");
+					if (oauthJson != null)
+					{
+						for ( int i = 0; i < oauthJson.length(); i++)
+						{
+							org.json.JSONObject s = oauthJson.getJSONObject(i);
+							if (s.optString("oauthParam")!= null
+								&& !s.optString("oauthParam").isEmpty()){
+								Component c = configurationGrid.getFellowIfAny(s.optString("oauthParam"));
+								if (c != null){
+									c.setValue(s.optString("oauthValue"));
+								}	
+							}
+						
+						}
+					}	
+					for (String attribute: attributes) {
+						Component c = configurationGrid.getFellowIfAny (attribute);
+						if (c != null)
+						{
+							String v = json.optString(attribute);
+							if (c instanceof Listbox)
+							{
+								c.setSelectedItem(null);
+								for ( item: c.getItems()) {
+									if (item.getValue() != null && item.getValue().equals(v))
+										c.setSelectedItem ( item );
+								}
+							}
+							else
+								c.setValue ( v );
+						}
+					}
 				}
 		    }
+
 			void updateBlob () {
 				byte[] data = es.caib.zkib.datasource.XPathUtils.getValue(xmlAgentTop,"blobParam");
 				org.json.JSONObject json;
@@ -113,6 +161,71 @@
 					templates.put(ob);
 				}
 				json.put("templates", templates); 
+
+				for ( String attribute: attributes)
+				{
+					Component item = configurationGrid.getFellow (attribute);
+					String v = null;
+					if (item instanceof Listbox)
+					{
+						if (item.getSelectedItem() != null)
+							v = item.getSelectedItem().getValue();
+					}
+					else
+						v = item.getValue();
+					if ( v != null)
+						json.put(attribute, v);
+				}
+
+				String t = json.toString();
+				es.caib.zkib.datasource.XPathUtils.setValue(self,"blobParam", t.getBytes("UTF-8"));
+			}
+			
+			void updateOAuthParams(){
+				byte[] data = es.caib.zkib.datasource.XPathUtils.getValue(xmlAgentTop,"blobParam");
+				org.json.JSONObject json;
+				
+				if (data != null)
+				{
+					String t = new String ( data,"UTF-8"); 
+					org.json.JSONTokener tokener = new org.json.JSONTokener( t);
+					json = new org.json.JSONObject(tokener);
+				} else {
+					json = new org.json.JSONObject();
+				}
+				
+				String grantType;
+				Component authMethod = configurationGrid.getFellow("authMethod");
+				if("tokenOAuthCC".equals(authMethod.getSelectedItem().getValue())){
+					grantType = "client_credentials";
+				}
+				if("tokenOAuthPG".equals(authMethod.getSelectedItem().getValue())){
+					grantType = "password";
+				}
+				
+				org.json.JSONArray oauthJson = new org.json.JSONArray();
+				if (oauthParams != null){
+					for ( String attribute: oauthParams)
+					{
+						if (attribute.equals("grant_type")){
+							org.json.JSONObject ob = new org.json.JSONObject();
+							ob.put("oauthParam", attribute);
+							ob.put("oauthValue", grantType);
+							oauthJson.put(ob);
+						} else {
+							Component item = configurationGrid.getFellow(attribute);
+							String value = item.getValue();
+							if ( value != null) {
+							    org.json.JSONObject ob = new org.json.JSONObject();
+								ob.put("oauthParam", attribute);
+								ob.put("oauthValue", value);
+								oauthJson.put(ob);
+							}
+						}
+					}
+					json.put("oauthParams", oauthJson);
+				}
+				
 				String t = json.toString();
 				es.caib.zkib.datasource.XPathUtils.setValue(self,"blobParam", t.getBytes("UTF-8"));
 			}
@@ -151,37 +264,43 @@
 			}
 			
 			void manageAttributesForAuthType() {
-				System.out.println("manageAttributesForAuthType - self.getSelectedItem()="+self.getSelectedItem());
-				if (self.getSelectedItem()==null) {
+				Component authMethod = configurationGrid.getFellow("authMethod");
+				if (authMethod.getSelectedItem() == null) {
 					userRow.setVisible(true);
 					passRow.setVisible(true);
 					authURLRow.setVisible(true);
-					bodyDataRow.setVisible(true);
 					tokenAttributeRow.setVisible(true);
-				} else if ("".equals(self.getSelectedItem().getValue())) {
+					oauthRow.setVisible(false);
+				} else if ("".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(false);
 					passRow.setVisible(false);
 					authURLRow.setVisible(false);
-					bodyDataRow.setVisible(false);
 					tokenAttributeRow.setVisible(false);
-				} else if ("basic".equals(self.getSelectedItem().getValue())) {
+					oauthRow.setVisible(false);
+				} else if ("basic".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(true);
 					passRow.setVisible(true);
 					authURLRow.setVisible(false);
-					bodyDataRow.setVisible(false);
 					tokenAttributeRow.setVisible(false);
-				} else if ("token".equals(self.getSelectedItem().getValue())) {
+					oauthRow.setVisible(false);
+				} else if ("token".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(true);
 					passRow.setVisible(true);
 					authURLRow.setVisible(true);
-					bodyDataRow.setVisible(false);
 					tokenAttributeRow.setVisible(false);
-				} else if ("tokenOAuthCC".equals(self.getSelectedItem().getValue())) {
+					oauthRow.setVisible(false);
+				} else if ("tokenOAuthCC".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(false);
 					passRow.setVisible(false);
 					authURLRow.setVisible(true);
-					bodyDataRow.setVisible(true);
 					tokenAttributeRow.setVisible(true);
+					oauthRow.setVisible(true);
+				} else if ("tokenOAuthPG".equals(authMethod.getSelectedItem().getValue())) {
+					userRow.setVisible(true);
+					passRow.setVisible(true);
+					authURLRow.setVisible(true);
+					tokenAttributeRow.setVisible(true);
+					oauthRow.setVisible(true);
 				}
 			}
 		]]>
@@ -211,7 +330,7 @@
 			</row>
 			<row>
 				<input_etiqueta value="Authentication method" />
-				<listbox bind="@param2" mold="select"  disabled="{!canModifyAgent}" width="100px">
+				<listbox id="authMethod" bind="@param2" mold="select"  disabled="{!canModifyAgent}" width="100px">
 					<attribute name="onSelect">
 					<![CDATA[
 						manageAttributesForAuthType();
@@ -232,8 +351,11 @@
 						<listcell label="Token"/>
 					</listitem>
 					<listitem value="tokenOAuthCC">
-						<listcell label="Token OAuth Client Credential"/>
+						<listcell label="Token OAuth Client Credentials"/>
 					</listitem>
+					<listitem value="tokenOAuthPG">
+						<listcell label="Token OAuth Password Grant"/>
+					</listitem>					
 				</listbox>
 			</row>
 			<row id="authURLRow">
@@ -243,19 +365,38 @@
 						width_custom="98%" />
 				</hbox>
 			</row>
-			<row id="bodyDataRow">
-				<input_etiqueta value="Token body data" />
-				<hbox width="90%">
-					<input_dada bind="@param5" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
 			<row id="tokenAttributeRow">
 				<input_etiqueta value="Token attr. output" />
 				<hbox width="90%">
 					<input_dada bind="@param7" lectura="${!canModifyAgent}"
 						width_custom="98%" />
 				</hbox>
+			</row>
+			<row id="oauthRow">
+				<input_etiqueta value="Request parameters" />
+				<grid>
+					<columns visible="false"><column width="14%"/><column/> </columns>
+					<rows>
+						<row>
+							<input_etiqueta value="Client ID" />
+							<hbox width="90%">
+								<textbox width="96%" id="client_id" onChange='updateOAuthParams()'/>
+							</hbox>
+						</row>
+						<row>
+							<input_etiqueta value="Client secret" />
+							<hbox width="90%">
+								<textbox width="96%" id="client_secret" onChange='updateOAuthParams()'/>
+							</hbox>
+						</row>					
+						<row>
+							<input_etiqueta value="Scope" />
+							<hbox width="90%">
+								<textbox width="96%" id="scope" onChange='updateOAuthParams()'/>
+							</hbox>
+						</row>												
+					</rows>
+				</grid>
 			</row>
 			<row>
 				<input_etiqueta value="Enable debug" />
@@ -267,6 +408,18 @@
 						<listcell label="Yes"/>
 					</listitem>
 				</listbox>
+			</row>
+			<row >
+				<input_etiqueta value="Proxy host" />
+				<hbox width="90%">
+					<textbox width="98%" id="proxyHost" onChange="updateBlob()"/>
+				</hbox>
+			</row>
+			<row>
+				<input_etiqueta value="Proxy port" />
+				<hbox width="90%">
+					<textbox width="98%" id="proxyPort" onChange="updateBlob()"/>
+				</hbox>
 			</row>
 			<row>
 				<input_etiqueta value="XML Templates" />
