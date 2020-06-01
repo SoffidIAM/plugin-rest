@@ -14,12 +14,15 @@ import javax.ws.rs.core.MediaType;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.wink.client.ClientAuthenticationException;
+import org.apache.wink.client.ClientConfig;
 import org.apache.wink.client.ClientRequest;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.Resource;
 import org.apache.wink.client.RestClient;
 import org.apache.wink.client.handlers.HandlerContext;
+import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.apache.wink.common.http.HttpStatus;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,13 +32,17 @@ import es.caib.seycon.ng.comu.Password;
 public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 
 	Log log = LogFactory.getLog(getClass());
+	
+	private DefaultHttpClient httpClient;
 
-	public TokenHandlerOAuthImpl(String tokenURL, String user, Password password, String tokenAttribute, Map<String, String> oauthParams) {
+	public TokenHandlerOAuthImpl(String tokenURL, String user, Password password, String tokenAttribute,
+			Map<String, String> oauthParams, DefaultHttpClient httpClient2) {
 		setTokenURL(tokenURL);
 		setUser(user);
 		setPassword(password);
 		setTokenAttribute(tokenAttribute);
 		setOauthParams(oauthParams);
+		httpClient = httpClient2;
 	}
 
 	public ClientResponse handle(ClientRequest request, HandlerContext context) throws Exception {
@@ -75,7 +82,8 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 	 * @throws UnsupportedEncodingException 
 	 */
 	private void requestNewToken() throws JSONException, UnsupportedEncodingException {
-		RestClient client = new RestClient();
+		ClientConfig config = new ApacheHttpClientConfig(httpClient);
+		RestClient client = new RestClient(config);
 		Resource rsc = client.resource(getTokenURL());
 		boolean authBasicRequired = isBasicAuthRequired();
 		if (authBasicRequired) {
@@ -114,7 +122,8 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 	 * @throws UnsupportedEncodingException 
 	 */
 	private void requestWithToken() throws JSONException, UnsupportedEncodingException {
-		RestClient client = new RestClient();
+		ClientConfig config = new ApacheHttpClientConfig(httpClient);
+		RestClient client = new RestClient(config);
 		Resource rsc = client.resource(getTokenURL());
 		ClientResponse response = rsc
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)

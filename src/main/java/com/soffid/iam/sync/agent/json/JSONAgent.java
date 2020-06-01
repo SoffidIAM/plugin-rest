@@ -234,7 +234,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		if ("tokenOAuthCC".equals(authMethod)
 				|| "tokenOAuthPG".equals(authMethod))
 		{
-			TokenHandlerOAuthCC handler = new TokenHandlerOAuthCC(authUrl, body, tokenAttribute, httpClient2);
+			TokenHandlerOAuth handler = new TokenHandlerOAuthImpl(authUrl, loginDN, password, tokenAttribute, oauthParams, httpClient2);
 			config.handlers(handler);
 		}
 		config.setChunked(false);
