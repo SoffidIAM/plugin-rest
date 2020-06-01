@@ -234,7 +234,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		if ("tokenOAuthCC".equals(authMethod)
 				|| "tokenOAuthPG".equals(authMethod))
 		{
-			TokenHandlerOAuth handler = new TokenHandlerOAuthImpl(authUrl, loginDN, password, tokenAttribute, oauthParams, httpClient2);
+			TokenHandlerOAuth handler = new TokenHandlerOAuthImpl(authUrl, loginDN, password, tokenAttribute, oauthParams);
 			config.handlers(handler);
 		}
 		config.setChunked(false);
@@ -1566,12 +1566,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					response.consumeContent();
 					return null;
 				}
-		
-				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
-				{
-					if (debug)
-						log.info("No content received");
-				}
 				
 				if (response.getStatusCode() == HttpStatus.UNAUTHORIZED.getCode())
 				{
@@ -1580,7 +1574,13 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						createClient();
 					}
 				}	
-				
+		
+				if (response.getStatusCode() == HttpStatus.NO_CONTENT.getCode())
+				{
+					if (debug)
+						log.info("No content received");
+				}
+								
 				else
 				{
 					String mimeType = response.getHeaders().getFirst("Content-Type");
