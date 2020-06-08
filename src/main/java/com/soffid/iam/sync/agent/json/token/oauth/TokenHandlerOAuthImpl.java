@@ -172,7 +172,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 			oauthParams.put(PASSWORD, getPassword().getPassword());
 		}
 		
-		List<String> params = new ArrayList<>();	
+		List<String> params = new ArrayList<String>();	
 		for (Map.Entry<String,String> entry : oauthParams.entrySet()) {
 			if (entry.getValue() != null && !"".equals(entry.getValue())) {
 				if ((CLIENT_ID.equals(entry.getKey()) || CLIENT_SECRET.equals(entry.getKey())) && authBasicRequired) {
@@ -196,7 +196,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 	 */
 	private String getRefreshParams() throws UnsupportedEncodingException {
 		Map<String, String> oauthParams = getOauthParams();
-		Map<String, String> refreshParams = new HashMap<>();
+		Map<String, String> refreshParams = new HashMap<String,String>();
 		
 		refreshParams.put(GRANT_TYPE, REFRESH_TOKEN);
 		refreshParams.put(REFRESH_TOKEN, getRefreshToken());
@@ -208,7 +208,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 			refreshParams.put(CLIENT_SECRET, oauthParams.get(CLIENT_SECRET));
 		}
 		
-		List<String> params = new ArrayList<>();
+		List<String> params = new ArrayList<String>();
 		for (Map.Entry<String,String> entry : refreshParams.entrySet()) {
 			if (entry.getValue() != null && !"".equals(entry.getValue())) {
 				params.add(URLEncoder.encode(entry.getKey(), "UTF-8").concat("=")

@@ -12,7 +12,6 @@ public class TokenOAuthSorter implements Comparator<String> {
 	  /**
 	   * Compares order within params, to assure its correctness 
 	   */
-	  @Override
 	  public int compare(String o1, String o2) {
 		String param1 = o1.substring(0, o1.indexOf("="));
 		String param2 = o2.substring(0, o2.indexOf("="));
