@@ -1489,9 +1489,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		boolean repeat = false;
 		boolean addParams = true;
 		ExtensibleObjects eos = new ExtensibleObjects();
+		String newPath = null;
 		do
 		{
-			String path = translatePath (m, object);
+			String path = newPath == null ? translatePath (m, object) : newPath; 
 			repeat = false;
 			try
 			{
@@ -1669,9 +1670,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						path = (String) objectTranslator.eval(m.next, resp);
 						if (path != null)
 						{
-							log.info("Jumping to next page: "+path);
+							if (debug)
+								log.info("Jumping to next page: "+path);
 							repeat = true;
 							addParams = false;
+							newPath = path;
 						}
 					} else if (m.pagination != null && ! m.pagination.isEmpty())
 					{
