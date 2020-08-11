@@ -1527,15 +1527,15 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					String mimeType = response.getHeaders().getFirst("Content-Type");
 					ExtensibleObject resp = new ExtensibleObject();
 					resp.setObjectType(object.getObjectType());
-					if (mimeType.contains("json"))
+					if (mimeType != null && mimeType.contains("json"))
 					{
 						String txt = response.getEntity(String.class);
 						parseJsonObject(m, path, txt, resp);
-					} else if (mimeType.contains("xml")){
+					} else if (mimeType != null && mimeType.contains("xml")){
 						byte[] r = response.getEntity(byte[].class);
 						parseXmlObject(m, path, r, resp);
 					} else {
-						throw new InternalErrorException("Unexpected response type " + mimeType);
+						throw new InternalErrorException("Unexpected response, Content-Type: " + mimeType);
 					}
 					
 					
