@@ -1354,69 +1354,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			@SuppressWarnings("unused")
 			public Collection<Map<String,Object>> invoke (String verb, String command, Map<String, Object> params) throws InternalErrorException
 			{
-				if (debug)
-				{
-					log.info ("Invoking: "+verb+" on "+command);
-				}
-				if (verb.equalsIgnoreCase("invoke"))
-				{
-					List<Map<String,Object>> r = new LinkedList<Map<String,Object>>();
-					String[] v = command.split("\\.");
-					log.info("Searching for mapping "+v[0]);
-					List<InvocationMethod> methods = getMethods(v[0], v[1]);
-					if (methods.isEmpty())
-					{
-						log.info("Method "+v[1]+" does not exist for mapping "+v[0]);
-						throw new InternalErrorException("Mapping "+v[0]+" does not exist");
-					}
-					for ( InvocationMethod m: methods)
-					{
-						ExtensibleObject o = new ExtensibleObject();
-						o.setObjectType(v[0]);
-						o.putAll(params);
-						try {
-							ExtensibleObjects objects = jsonAgent.invoke(m, o, null);
-							for ( ExtensibleObject eo: objects.getObjects())
-							{
-								r.add(eo);
-							}
-						} catch (JSONException e) {
-							throw new InternalErrorException("Error invoking method "+v[1]+" on object "+v[0]);
-						}
-					}
-					return r;
-				}
-				else
-				{
-	
-					Resource resource = client
-							.resource(command)
-							.contentType(MediaType.APPLICATION_JSON)
-							.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
-	
-					ClientResponse response = resource.invoke(verb, ClientResponse.class,
-							params == null ? null : new JSONObject(params));
-					
-					String mimeType = response.getHeaders().getFirst("Content-Type");
-					HashMap<String, Object> r = new HashMap<String, Object>();
-					if (mimeType.contains("json"))
-					{
-						String txt = response.getEntity(String.class);
-						parseJsonObject(null, command, txt, r);
-						if (debug && txt != null)
-						{
-							log.info ("Result: "+txt);
-						}
-					} else if (mimeType.contains("xml")){
-						byte[] data = response.getEntity(byte[].class);
-						parseXmlObject(null, command, data, r);
-					} else {
-						throw new InternalErrorException("Unexpected response type " + mimeType);
-					}
-					LinkedList<Map<String,Object>> rl = new LinkedList<Map<String,Object>>();
-					rl.add(r);
-					return rl;
-				}
+				return jsonAgent.invoke(verb, command, params);
 			}
 
 		});
@@ -1489,7 +1427,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		boolean repeat = false;
 		boolean addParams = true;
 		ExtensibleObjects eos = new ExtensibleObjects();
-		String newPath = null;
+		String newPath = pageStatus.getNextPath();
+		if (pageStatus.getNextObject() != null)
+			object = pageStatus.getNextObject();
 		do
 		{
 			String path = newPath == null ? translatePath (m, object) : newPath; 
@@ -1699,6 +1639,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			if (repeat && ! pageStatus.isAuto())
 			{
 				repeat = false;
+				pageStatus.nextPath = path;
+				pageStatus.nextObject = object;
 				pageStatus.setHasMore(true);
 			}
 		} while (repeat);
@@ -2544,5 +2486,74 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			throws RemoteException, InternalErrorException {
 		return null;
 	}
+	
+	public Collection<Map<String, Object>> invoke(String verb, String command,
+			Map<String, Object> params) throws  InternalErrorException 
+	{
+		if (debug)
+		{
+			log.info ("Invoking: "+verb+" on "+command);
+		}
+		if (verb.equalsIgnoreCase("invoke"))
+		{
+			List<Map<String,Object>> r = new LinkedList<Map<String,Object>>();
+			String[] v = command.split("\\.");
+			log.info("Searching for mapping "+v[0]);
+			List<InvocationMethod> methods = getMethods(v[0], v[1]);
+			if (methods.isEmpty())
+			{
+				log.info("Method "+v[1]+" does not exist for mapping "+v[0]);
+				throw new InternalErrorException("Mapping "+v[0]+" does not exist");
+			}
+			for ( InvocationMethod m: methods)
+			{
+				ExtensibleObject o = new ExtensibleObject();
+				o.setObjectType(v[0]);
+				o.putAll(params);
+				try {
+					ExtensibleObjects objects = invoke(m, o, null);
+					if (objects != null) for ( ExtensibleObject eo: objects.getObjects())
+					{
+						r.add(eo);
+					}
+				} catch (JSONException e) {
+					throw new InternalErrorException("Error invoking method "+v[1]+" on object "+v[0]);
+				}
+			}
+			return r;
+		}
+		else
+		{
+
+			Resource resource = client
+					.resource(command)
+					.contentType(MediaType.APPLICATION_JSON)
+					.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
+
+			ClientResponse response = resource.invoke(verb, ClientResponse.class,
+					params == null ? null : new JSONObject(params));
+			
+			String mimeType = response.getHeaders().getFirst("Content-Type");
+			HashMap<String, Object> r = new HashMap<String, Object>();
+			if (mimeType.contains("json"))
+			{
+				String txt = response.getEntity(String.class);
+				parseJsonObject(null, command, txt, r);
+				if (debug && txt != null)
+				{
+					log.info ("Result: "+txt);
+				}
+			} else if (mimeType.contains("xml")){
+				byte[] data = response.getEntity(byte[].class);
+				parseXmlObject(null, command, data, r);
+			} else {
+				throw new InternalErrorException("Unexpected response type " + mimeType);
+			}
+			LinkedList<Map<String,Object>> rl = new LinkedList<Map<String,Object>>();
+			rl.add(r);
+			return rl;
+		}
+	}
+
 }
 	

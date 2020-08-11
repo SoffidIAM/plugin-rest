@@ -143,6 +143,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 		boolean started;
 		boolean finished;
 		public InvocationMethod method;
+		PaginationStatus paginationStatus = new PaginationStatus();
 	}
 	List<SearchItem> searchItems = null;
 	boolean moreData = false;
@@ -162,9 +163,8 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 			{
 				if (! searchItem.finished)
 				{
-					PaginationStatus p = new PaginationStatus();
-					p.setAuto(false);
-					ExtensibleObjects objects = invoke (searchItem.method, searchItem.target, searchItem.srcObject, p);
+					searchItem.paginationStatus.setAuto(false);
+					ExtensibleObjects objects = invoke (searchItem.method, searchItem.target, searchItem.srcObject, searchItem.paginationStatus);
 					if (objects != null)
 					{
 						for (ExtensibleObject eo: objects.getObjects())
@@ -174,7 +174,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 							if (ch != null)
 								changes.add(ch);
 						}
-						if ( ! p.isHasMore())
+						if ( ! searchItem.paginationStatus.isHasMore())
 							searchItem.finished = true;
 						if ( ! changes.isEmpty())
 						{
