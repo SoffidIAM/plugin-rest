@@ -1301,11 +1301,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 
 	public void updateUserPassword(String accountName, Usuari user, Password password,
 			boolean mustChange) throws RemoteException, InternalErrorException {
-		Account acc = new Account ();
-		acc.setName(accountName);
-		if (user != null)
-			acc.setDescription(user.getFullName());
-		acc.setDispatcher(getCodi());
+		Account acc = getServer().getAccountInfo(accountName, getCodi());
+		if (acc == null)
+			return ;
 		ExtensibleObject object = user == null ?
 				new AccountExtensibleObject(acc, getServer()) :
 				new UserExtensibleObject(acc, user, getServer());
@@ -1448,14 +1446,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					}
 					if (debug)
 						log.info("Invoking GET on "+path);
-					Resource request = client.resource(path)
-							.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
+					Resource request = client.resource(path);
+//							.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
 					addHeaders (request, m, object);
 					response = request.get();
 				} else {
 					Resource request = client.resource(path)
-							.contentType(m.encoding)
-							.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
+							.contentType(m.encoding);
+//							.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
 					addHeaders (request, m, object);
 					if ( "post".equalsIgnoreCase(m.method)) {
 						if (m.encoding == null)
@@ -1878,7 +1876,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			}
 			return sb.toString();
 		}
-		else if ("text/xml".equalsIgnoreCase(m.encoding) )
+		else if (m.encoding != null && m.encoding.toLowerCase().startsWith("text/xml"))
 		{
 			if (m.template != null)
 			{
@@ -2527,8 +2525,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 
 			Resource resource = client
 					.resource(command)
-					.contentType(MediaType.APPLICATION_JSON)
-					.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
+					.contentType(MediaType.APPLICATION_JSON);
+//					.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
 
 			ClientResponse response = resource.invoke(verb, ClientResponse.class,
 					params == null ? null : new JSONObject(params));
