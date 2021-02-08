@@ -52,7 +52,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 				request.getHeaders().putSingle("Authorization", auth);
 			}
 		}
-		System.out.println("TokenHandlerOAuthCC.handle() - doChain()");
+		log.info("TokenHandlerOAuthCC.handle() - doChain()");
 		return context.doChain(request);
 	}
 
@@ -86,16 +86,17 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.accept(MediaType.APPLICATION_JSON)
 				.post(getBodyOAuthParams(getOauthParams(), authBasicRequired));
-		System.out.println("TokenHandlerOAuthCC.requestNewToken() - response="+response);
-		System.out.println("TokenHandlerOAuthCC.requestNewToken() - response.getStatusCode()="+response.getStatusCode());
+		log.info("TokenHandlerOAuthCC.requestNewToken() - response="+response);
+		log.info("TokenHandlerOAuthCC.requestNewToken() - response.getStatusCode()="+response.getStatusCode());
 
 		if (response.getStatusCode() == HttpStatus.OK.getCode()) {
-			String result = response.getEntity(String.class);	
+			String result = response.getEntity(String.class);
+			log.info("TokenHandlerOAuthCC.requestNewToken() - result="+result);
 			fillResponseData(result);
 			if (getAuthToken() == null)
 				throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getMessage());
 		} else {
-			System.out.println("TokenHandlerOAuthCC.requestNewToken() - response.getMessage()="+response.getMessage());
+			log.info("TokenHandlerOAuthCC.requestNewToken() - response.getMessage()="+response.getMessage());
 			throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getMessage());
 		}
 	}
@@ -121,8 +122,8 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
 				.accept(MediaType.APPLICATION_JSON)
 				.post(getRefreshParams());
-		System.out.println("TokenHandlerOAuthCC.requestNewToken() - response="+response);
-		System.out.println("TokenHandlerOAuthCC.requestNewToken() - response.getStatusCode()="+response.getStatusCode());
+		log.info("TokenHandlerOAuthCC.requestNewToken() - response="+response);
+		log.info("TokenHandlerOAuthCC.requestNewToken() - response.getStatusCode()="+response.getStatusCode());
 
 		if (response.getStatusCode() == HttpStatus.OK.getCode()) {
 			String result = response.getEntity(String.class);	
@@ -130,7 +131,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 			if (getAuthToken() == null)
 				throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getMessage());
 		} else {
-			System.out.println("TokenHandlerOAuthCC.requestNewToken() - couldn't obtanin a token, retrying");
+			log.info("TokenHandlerOAuthCC.requestNewToken() - couldn't obtanin a token, retrying");
 			requestNewToken();
 		}
 	}
@@ -147,9 +148,16 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 		
 		if (getTokenAttribute().isEmpty())
 			setAuthToken(jsonResult.getString(ACCESS_TOKEN));
-		else
+		else if (getTokenAttribute().contains(".")) {
+			String[] atts = getTokenAttribute().split("\\.");
+			for (int i=0; i<atts.length-1; i++) {
+				jsonResult = jsonResult.getJSONObject(atts[i]);
+			}
+			setAuthToken(jsonResult.getString(atts[atts.length-1]));
+		} else {
 			setAuthToken(jsonResult.getString(getTokenAttribute()));
-		
+		}
+
 		if (jsonResult.has(EXPIRES_IN))
 			setExpiresIn(Long.valueOf(jsonResult.getInt(EXPIRES_IN)));
 		
