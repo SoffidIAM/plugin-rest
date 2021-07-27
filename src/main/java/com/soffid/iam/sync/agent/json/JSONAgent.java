@@ -1,6 +1,7 @@
 package com.soffid.iam.sync.agent.json;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
@@ -51,6 +52,8 @@ import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.Text;
 
+import com.soffid.iam.api.AccountStatus;
+import com.soffid.iam.remote.RemoteServiceLocator;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuth;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuthImpl;
 
@@ -847,7 +850,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 											{
 												if (debug)
 												{
-													log.info("Removing grant "+grantObject);
+													debugObject("Removing grant ", jsonObject, "");
 												}
 												boolean triggerRan = false;
 												for (InvocationMethod m: getMethods(jsonObject.getObjectType(), "delete"))
@@ -855,6 +858,10 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 													if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_DELETE, geo, jsonObject, jsonObject))
 													{
 														triggerRan = true;
+														if (debug)
+														{
+															debugObject("Removing grant ", jsonObject, "");
+														}
 														invoke (m, jsonObject, grantObject);
 													}
 												}
@@ -1183,42 +1190,57 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 
 	public void removeUser(String accountName) throws RemoteException,
 			InternalErrorException {
-		Account acc = getServer().getAccountInfo(accountName, getCodi());
-		if (acc == null)
-			removeScimUser(accountName);
+		com.soffid.iam.api.Account acc2;
+		try {
+			acc2 = new RemoteServiceLocator(getServerName()).getAccountService().findAccount(accountName, getCodi());
+		} catch (IOException e1) {
+			throw new RemoteException("Error fetching account info", e1);
+		}
+		Account acc;
+		if (acc2 == null) {
+			acc = new Account();
+			acc.setName(accountName);
+			acc.setDispatcher(getCodi());
+			acc.setStatus(AccountStatus.REMOVED);
+			acc.setDisabled(true);
+			removeScimUser(acc, null);
+		}
+		else if (acc2.getStatus() == AccountStatus.REMOVED) {
+			try {
+				Usuari u = getServer().getUserInfo(accountName, getCodi());
+				removeScimUser( Account.toAccount(acc2), u);
+			} catch (UnknownUserException e) {
+				removeScimUser(Account.toAccount(acc2), null);
+			}
+		}
 		else
 		{
 			try {
 				Usuari u = getServer().getUserInfo(accountName, getCodi());
-				updateUser (acc, u);
+				updateUser (Account.toAccount(acc2), u);
 			} catch (UnknownUserException e) {
-				updateUser (acc);
+				updateUser (Account.toAccount(acc2));
 			}
 		}
 	}
 		
-	public void removeScimUser(String accountName) throws RemoteException,
+	public void removeScimUser(Account acc, Usuari user) throws RemoteException,
 		InternalErrorException {
-		Account acc = new Account();
-		acc.setName(accountName);
-		acc.setDispatcher(getCodi());
-		ExtensibleObject userObject = new AccountExtensibleObject(acc,
-						getServer());
+		ExtensibleObject userObject = user == null ?  
+			new AccountExtensibleObject(acc, getServer()) :
+			new UserExtensibleObject(acc, user, getServer());
+		SoffidObjectType mapping = user == null ? 
+			SoffidObjectType.OBJECT_ACCOUNT: 
+			SoffidObjectType.OBJECT_USER;
 		try {
 			for (ExtensibleObjectMapping eom: objectMappings)
 			{
-				if (eom.getSoffidObject().equals(SoffidObjectType.OBJECT_ACCOUNT)  &&
+				if (eom.getSoffidObject().equals(mapping)  &&
 						! "true".equals( eom.getProperties().get("preventDeletion")))
 				{
-					String condition = eom.getCondition();
-					eom.setCondition(null);
-					try {
-						ExtensibleObject obj = objectTranslator.generateObject(userObject, eom);
-						if (obj != null)
-							removeObject(userObject, obj);
-					} finally { 
-						eom.setCondition(condition);
-					}
+					ExtensibleObject obj = objectTranslator.generateObject(userObject, eom);
+					if (obj != null)
+						removeObject(userObject, obj);
 				}
 			}
 		}
@@ -1239,16 +1261,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			{
 				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_USER) )
 				{
-					if (objectTranslator.evalCondition(sourceObject, mapping))
-					{
-		    			ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
-		    			if (obj != null)
-		    				updateObject(sourceObject, obj);
-					}
-					else
-					{
-						removeScimUser(acc.getName());
-					}
+	    			ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
+	    			if (obj != null)
+	    				updateObject(sourceObject, obj);
 					updateAccountGrants(acc.getName());
 				}
 			}
@@ -1277,16 +1292,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			{
 				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ACCOUNT))
 				{
-					if (objectTranslator.evalCondition(sourceObject, mapping))
-					{
-		    			ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
-		    			if (obj != null)
-		    				updateObject(sourceObject, obj);
-					}
-					else
-					{
-						removeScimUser(acc.getName());
-					}
+	    			ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
+	    			if (obj != null)
+	    				updateObject(sourceObject, obj);
 					updateAccountGrants(acc.getName());
 				}
 			}
@@ -1533,7 +1541,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						byte[] r = response.getEntity(byte[].class);
 						parseXmlObject(m, path, r, resp);
 					} else {
-						throw new InternalErrorException("Unexpected response, Content-Type: " + mimeType);
+						throw new InternalErrorException("Unexpected Content-Type: " + mimeType+" for response "+response.getStatusCode());
 					}
 					
 					
@@ -2411,8 +2419,20 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			throws RemoteException,
 			es.caib.seycon.ng.exception.InternalErrorException {
 		Account acc = getServer().getAccountInfo(account, getCodi());
-		if (acc == null)
-			removeScimUser(account);
+		if (acc == null) {
+			acc = new Account();
+			acc.setName(account);
+			acc.setDispatcher(getCodi());
+			acc.setStatus(AccountStatus.REMOVED);
+			acc.setDisabled(true);
+			removeScimUser(acc, null);
+		}
+		else if (acc.getStatus() == AccountStatus.REMOVED)
+			try {
+				removeScimUser(acc, getServer().getUserInfo(account, getCodi()));
+			} catch (UnknownUserException e) {
+				removeScimUser(acc, null);
+			}
 		else
 			updateUser (acc);
 	
@@ -2438,6 +2458,18 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		log.info("  soffidType    "+(soffidObject == null ? "null": soffidObject.getObjectType()));
 		log.info("  response      "+(response == null ? "null": response.toString()));
 		SoffidObjectType sot = SoffidObjectType.fromString(soffidObject.getObjectType());
+		if (sot == SoffidObjectType.OBJECT_GRANT)
+			return runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response, SoffidObjectType.OBJECT_GRANT) &&
+					runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response,  SoffidObjectType.OBJECT_ALL_GRANTED_ROLES) &&
+					runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response,  SoffidObjectType.OBJECT_GRANTED_ROLE);
+		else
+			return runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response, sot);
+		
+	}
+
+	protected boolean runTriggerStep2(SoffidObjectTrigger triggerType, ExtensibleObject soffidObject,
+			ExtensibleObject newObject, ExtensibleObject oldObject, ExtensibleObjects response, SoffidObjectType sot)
+			throws InternalErrorException {
 		for ( ExtensibleObjectMapping eom : objectTranslator.getObjectsBySoffidType(sot))
 		{
 			if (oldObject == null || oldObject.getObjectType().equals(eom.getSystemObject()))
@@ -2472,7 +2504,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			}
 		}
 		return true;
-		
 	}
 
 	public ExtensibleObject getNativeObject(SoffidObjectType type, String object1, String object2)
@@ -2496,12 +2527,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		{
 			List<Map<String,Object>> r = new LinkedList<Map<String,Object>>();
 			String[] v = command.split("\\.");
+			if (v.length != 2)
+				throw new InternalErrorException("The command "+command+" is not valid. It should have the form ObjectType.Method");
 			log.info("Searching for mapping "+v[0]);
 			List<InvocationMethod> methods = getMethods(v[0], v[1]);
 			if (methods.isEmpty())
 			{
 				log.info("Method "+v[1]+" does not exist for mapping "+v[0]);
-				throw new InternalErrorException("Mapping "+v[0]+" does not exist");
+				throw new InternalErrorException("Method "+v[0]+"."+v[1]+" does not exist");
 			}
 			for ( InvocationMethod m: methods)
 			{
