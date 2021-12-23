@@ -1360,7 +1360,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				return searchJsonObject(pattern, null);
 			}
 
-			@SuppressWarnings("unused")
 			public Collection<Map<String,Object>> invoke (String verb, String command, Map<String, Object> params) throws InternalErrorException
 			{
 				return jsonAgent.invoke(verb, command, params);
