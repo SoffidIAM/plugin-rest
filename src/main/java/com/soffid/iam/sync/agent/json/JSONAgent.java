@@ -416,16 +416,19 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		try {
 			for (ExtensibleObjectMapping eom: objectMappings)
 			{
-				if (! "true".equals( eom.getProperties().get("preventDeletion")))
+				if (eom.getSoffidObject().equals (SoffidObjectType.OBJECT_GROUP))
 				{
-					String condition = eom.getCondition();
-					eom.setCondition(null);
-					try {
-						ExtensibleObject obj = objectTranslator.generateObject(groupObject, eom);
-						if (obj != null)
-							removeObject(groupObject, obj);
-					} finally { 
-						eom.setCondition(condition);
+					if (! "true".equals( eom.getProperties().get("preventDeletion")))
+					{
+						String condition = eom.getCondition();
+						eom.setCondition(null);
+						try {
+							ExtensibleObject obj = objectTranslator.generateObject(groupObject, eom);
+							if (obj != null)
+								removeObject(groupObject, obj);
+						} finally {
+							eom.setCondition(condition);
+						}
 					}
 				}
 			}
