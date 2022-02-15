@@ -1265,9 +1265,12 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_USER) )
 				{
 	    			ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
-	    			if (obj != null)
+	    			if (obj != null) {
 	    				updateObject(sourceObject, obj);
-					updateAccountGrants(acc.getName());
+	    				ExtensibleObject existingObject = searchJsonObject(obj, sourceObject);
+	    				if (existingObject!=null)
+	    					updateAccountGrants(acc.getName());
+	    			}
 				}
 			}
 		}
@@ -1296,9 +1299,12 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				if (mapping.getSoffidObject().equals (SoffidObjectType.OBJECT_ACCOUNT))
 				{
 	    			ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
-	    			if (obj != null)
+	    			if (obj != null) {
 	    				updateObject(sourceObject, obj);
-					updateAccountGrants(acc.getName());
+	    				ExtensibleObject existingObject = searchJsonObject(sourceObject, obj);
+	    				if (existingObject!=null)
+	    					updateAccountGrants(acc.getName());
+	    			}
 				}
 			}
 		}
