@@ -713,6 +713,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 										RolGrant grant = vom.parseGrant(grantObject);
 										if (grant != null)
 										{
+											grant.setRolName(roleName);
 											if (debug)
 												log.info("Soffid grant: "+grant.toString());
 											grants.add(grant);
@@ -880,6 +881,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							for (RolGrant grant: grants)
 							{
 								grant.setOwnerAccountName(accountName);
+								grant.setOwnerDispatcher(getCodi());
 								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
 								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
 								boolean triggerRan = false;
@@ -1457,7 +1459,6 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 					if (debug)
 						log.info("Invoking GET on "+path);
 					Resource request = client.resource(path);
-//							.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
 					addHeaders (request, m, object);
 					response = request.get();
 				} else {
@@ -1819,6 +1820,8 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	}
 
 	protected void addHeaders(Resource request, InvocationMethod m, ExtensibleObject obj) throws InternalErrorException {
+		if ("bearer".equals(authMethod))
+			request.header("Authorization", "Bearer "+loginDN);
 		if (m.headers != null)
 			for (String[] header: m.headers)
 				request.header(header[0],  translate(header[1], obj));
