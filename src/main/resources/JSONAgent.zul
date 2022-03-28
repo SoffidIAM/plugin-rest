@@ -8,6 +8,13 @@
 	<grid width="99%" id="configurationGrid">
 		<attribute name='onCreate'>
 		<![CDATA[
+		consoleVersion = "2";
+		try {
+			cl = com.soffid.iam.web.user.UserHandler.class;
+			consoleVersion = "3";
+		} catch (Exception e) {
+		}
+		xmlAgentTop.setAttribute("ConsoleVersion", consoleVersion);
 	    try {
 	    	updateGrid ();
 	    	manageAttributesForAuthType ();
@@ -86,16 +93,17 @@
 								Row row = new Row();
 								row.setAttribute("template", s.optString("template"));
 								g.getRows().appendChild(row);
+								Textbox tb = new Textbox();
+								tb.setWidth("90%");
+								tb.setValue (s.optString("name"));
+								row.appendChild(tb);
 								Div div = new Div();
 								row.appendChild(div);
-								Textbox tb = new Textbox();
-								tb.setWidth("200px");
-								tb.setValue (s.optString("name"));
-								div.appendChild(tb);
-								es.caib.zkib.zkiblaf.ImageClic ic = new es.caib.zkib.zkiblaf.ImageClic("/img/pencil.png"); 
+								consoleVersion = xmlAgentTop.getAttribute("ConsoleVersion");
+								es.caib.zkib.zkiblaf.ImageClic ic = new es.caib.zkib.zkiblaf.ImageClic("3".equals(consoleVersion) ? "/img/pencil.svg": "/img/pencil.png"); 
 								ic.addEventListener("onClick", editTemplate);
 								div.appendChild(ic);
-								ic = new es.caib.zkib.zkiblaf.ImageClic("~./img/list-remove.gif");
+								ic = new es.caib.zkib.zkiblaf.ImageClic("3".equals(consoleVersion) ? "/img/remove.svg": "~./img/list-remove.gif");
 								ic.addEventListener("onClick", removeTemplate);
 								div.appendChild(ic);
 							}
@@ -244,21 +252,23 @@
 					"             <value-of select='param1'/>\n"+
 					"           </wsdl:actualRequest>\n"+
 					"        </soapenv:Body>\n"+
+					"      </soapenv:Envelope>\n"+
 					"    </xsl:template>\n"+
 					"</xsl:stylesheet>");
 				g.getRows().appendChild(row);
-				Div div = new Div();
-				row.appendChild(div);
 				Textbox tb = new Textbox();
 				tb.setAttribute("onChange", "updateBlob()");
-				tb.setWidth("200px");
+				tb.setWidth("90%");
 				tb.setValue ("");
 				tb.focus();
-				div.appendChild(tb);
-				es.caib.zkib.zkiblaf.ImageClic ic = new es.caib.zkib.zkiblaf.ImageClic("/img/pencil.png"); 
+				row.appendChild(tb);
+				Div div = new Div();
+				row.appendChild(div);
+				consoleVersion = xmlAgentTop.getAttribute("ConsoleVersion");
+				es.caib.zkib.zkiblaf.ImageClic ic = new es.caib.zkib.zkiblaf.ImageClic("3".equals(consoleVersion) ? "/img/pencil.svg": "/img/pencil.png"); 
 				ic.addEventListener("onClick", editTemplate);
 				div.appendChild (ic);
-				ic = new es.caib.zkib.zkiblaf.ImageClic("~./img/list-remove.gif");
+				ic = new es.caib.zkib.zkiblaf.ImageClic("3".equals(consoleVersion) ? "/img/remove.svg": "~./img/list-remove.gif");
 				ic.addEventListener("onClick", removeTemplate);
 				div.appendChild (ic);
 			}
@@ -271,36 +281,49 @@
 					authURLRow.setVisible(true);
 					tokenAttributeRow.setVisible(true);
 					oauthRow.setVisible(false);
+					tokenRow.setVisible(false);
 				} else if ("".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(false);
 					passRow.setVisible(false);
 					authURLRow.setVisible(false);
 					tokenAttributeRow.setVisible(false);
 					oauthRow.setVisible(false);
+					tokenRow.setVisible(false);
 				} else if ("basic".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(true);
 					passRow.setVisible(true);
 					authURLRow.setVisible(false);
 					tokenAttributeRow.setVisible(false);
 					oauthRow.setVisible(false);
+					tokenRow.setVisible(false);
 				} else if ("token".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(true);
 					passRow.setVisible(true);
 					authURLRow.setVisible(true);
 					tokenAttributeRow.setVisible(false);
 					oauthRow.setVisible(false);
+					tokenRow.setVisible(false);
+				} else if ("bearer".equals(authMethod.getSelectedItem().getValue())) {
+					userRow.setVisible(false);
+					passRow.setVisible(false);
+					authURLRow.setVisible(false);
+					tokenAttributeRow.setVisible(false);
+					oauthRow.setVisible(false);
+					tokenRow.setVisible(true);
 				} else if ("tokenOAuthCC".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(false);
 					passRow.setVisible(false);
 					authURLRow.setVisible(true);
 					tokenAttributeRow.setVisible(true);
 					oauthRow.setVisible(true);
+					tokenRow.setVisible(false);
 				} else if ("tokenOAuthPG".equals(authMethod.getSelectedItem().getValue())) {
 					userRow.setVisible(true);
 					passRow.setVisible(true);
 					authURLRow.setVisible(true);
 					tokenAttributeRow.setVisible(true);
 					oauthRow.setVisible(true);
+					tokenRow.setVisible(false);
 				}
 			}
 		]]>
@@ -347,6 +370,9 @@
 					<listitem value="basic">
 						<listcell label="Basic"/>
 					</listitem>
+					<listitem value="bearer">
+						<listcell label="Bearer token"/>
+					</listitem>
 					<listitem value="token">
 						<listcell label="Token"/>
 					</listitem>
@@ -362,6 +388,13 @@
 				<input_etiqueta value="Authentication URL" />
 				<hbox width="90%">
 					<input_dada bind="@param3" lectura="${!canModifyAgent}"
+						width_custom="98%" />
+				</hbox>
+			</row>
+			<row id="tokenRow">
+				<input_etiqueta value="Bearer token" />
+				<hbox width="90%">
+					<input_dada bind="@param0" lectura="${!canModifyAgent}"
 						width_custom="98%" />
 				</hbox>
 			</row>
@@ -425,8 +458,8 @@
 				<input_etiqueta value="XML Templates" />
 				<grid id="xmlTemplates">
 					<columns>
-						<column label="name"></column>
-						<column label="-"></column>
+						<column label="name" width="*"></column>
+						<column label=" " width="80px"></column>
 					</columns>
 					<rows></rows>
 				</grid>
