@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 import javax.ws.rs.core.MediaType;
@@ -35,6 +36,7 @@ import javax.xml.transform.stream.StreamResult;
 
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
+import org.apache.wink.client.ClientAuthenticationException;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientRuntimeException;
 import org.apache.wink.client.ClientWebException;
@@ -53,6 +55,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.Text;
 
 import com.soffid.iam.api.AccountStatus;
+import com.soffid.iam.api.RoleGrant;
 import com.soffid.iam.remote.RemoteServiceLocator;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuth;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuthImpl;
@@ -88,6 +91,7 @@ import es.caib.seycon.ng.sync.intf.GroupMgr;
 import es.caib.seycon.ng.sync.intf.ReconcileMgr2;
 import es.caib.seycon.ng.sync.intf.RoleMgr;
 import es.caib.seycon.ng.sync.intf.UserMgr;
+import es.caib.seycon.util.Base64;
 
 /**
  * Agente que gestiona los usuarios y contraseñas del LDAP Hace uso de las
@@ -909,7 +913,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 	}
 
 
-	private void updateRoleGrants(String roleName, Long roleId) throws InternalErrorException, UnknownRoleException {
+	private void updateRoleGrants(String roleName, Long roleId) throws InternalErrorException, UnknownRoleException, IOException {
 		try {
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
@@ -921,7 +925,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				{
 					if (debug)
 						log.info("Using "+mapping.getSystemObject()+" mapping to update "+roleName+" users");
-					Collection<Account> accounts = getServer().getRoleActiveAccounts(roleId, getCodi());
+					Collection<RolGrant> accounts = new es.caib.seycon.ng.remote.RemoteServiceLocator().getAplicacioService().findEffectiveRolGrantsByRolId(roleId);
 					
 					RolGrant rg = new RolGrant();
 					rg.setDispatcher(getCodi());
@@ -948,12 +952,14 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 										if (grant != null)
 										{
 											boolean found = false;
-											for (Account account: new LinkedList<Account>(accounts))
+											for (RolGrant account: new LinkedList<RolGrant>(accounts))
 											{
-												if (account.getName() .equals(grant.getOwnerAccountName()))
+												if (account.getOwnerAccountName() .equals(grant.getOwnerAccountName()))
 												{
-													found = true;
-													accounts.remove(account);
+													if (grant.getDomainValue() == null || grant.getDomainValue().equals(account.getDomainValue())) {
+														found = true;
+														accounts.remove(account);
+													}
 												}
 											}
 											if (! found)
@@ -980,14 +986,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 							}
 							if (debug)
 								log.info("Adding new grants");
-							for (Account account: accounts)
+							for (RolGrant grant: accounts)
 							{
-								RolGrant grant = new RolGrant();
-								grant.setDispatcher(getCodi());
-								grant.setRolName(roleName);
-								grant.setOwnerDispatcher(getCodi());
-								grant.setOwnerAccountName(account.getName());
-								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
+								ExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
 								ExtensibleObject targetObject = objectTranslator.generateObject( sourceObject, mapping);
 								boolean triggerRan = false;
 								for (InvocationMethod m: getMethods(targetObject.getObjectType(), "insert"))
@@ -1351,9 +1352,96 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
-	public boolean validateUserPassword(String arg0, Password arg1)
+	public boolean validateUserPassword(String account, Password password)
 			throws RemoteException, InternalErrorException {
+		Account acc = getServer().getAccountInfo(account, getCodi());
+		if (acc == null) {
+			acc = new Account();
+			acc.setName(account);
+			acc.setDescription(account);
+		}
+		ExtensibleObject eo = new AccountExtensibleObject(acc, getServer());
+		eo.setAttribute("password", password.getPassword());
+		Boolean r = validataUserPassword (eo, SoffidObjectType.OBJECT_ACCOUNT);
+		if (r != null && r.booleanValue()) 
+			return true;
+		Boolean r2 = null;
+		try {
+			Usuari user = getServer().getUserInfo(account, getCodi());
+			eo = new UserExtensibleObject(acc, user, getServer());
+			eo.setAttribute("password", password.getPassword());
+			r2 = validataUserPassword (eo, SoffidObjectType.OBJECT_USER);
+			if (r2 != null && r2.booleanValue())
+				return true;
+		} catch (UnknownUserException e) {
+		}
+		if (r == null && r2 == null &&  authMethod.startsWith("tokenOAuth")) {
+			try {
+				return validateOauth(account, password.getPassword());
+			} catch (UnsupportedEncodingException e) {
+				throw new InternalErrorException("Error validating password for user "+account, e);
+			} catch (JSONException e) {
+				throw new InternalErrorException("Error validating password for user "+account, e);
+			}
+		}
 		return false;
+	}
+
+	private boolean validateOauth(String user, String password) throws JSONException, UnsupportedEncodingException {
+		RestClient client = new RestClient();
+		Resource rsc = client.resource(authUrl);
+		
+		StringBuffer params = new StringBuffer();
+		
+		params.append("client_id=")
+			.append(URLEncoder.encode(oauthParams.get(TokenHandlerOAuthImpl.CLIENT_ID), "UTF-8"))
+			.append("&client_secret=")
+			.append(URLEncoder.encode(oauthParams.get(TokenHandlerOAuthImpl.CLIENT_SECRET), "UTF-8"))
+			.append("&grant_type=password")
+			.append("&scope=")
+			.append(URLEncoder.encode(oauthParams.get("scope"), "UTF-8"))
+			.append("&username=")
+			.append(URLEncoder.encode(user, "UTF-8"))
+			.append("&password=")
+			.append(URLEncoder.encode(password, "UTF-8"));
+		ClientResponse response = rsc
+				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+				.accept(MediaType.APPLICATION_JSON)
+				.post(params.toString());
+
+		if (response.getStatusCode() == HttpStatus.OK.getCode()) {
+			String result = response.getEntity(String.class);
+			JSONObject json = new JSONObject(result);
+			if (json.has("access_token")) return true;
+			else {
+				log.info("Unexpected response "+result);
+				return false;
+			}
+		} else {
+			log.info("Error validating username and password: "+ response.getMessage());
+			return false;
+		}
+	}
+	
+	private Boolean validataUserPassword(ExtensibleObject eo, SoffidObjectType objectUser) throws InternalErrorException {
+		Boolean result = null;
+		for (ExtensibleObjectMapping mapping: objectMappings) {
+			if (mapping.getSoffidObject().toString().equals(objectUser.toString())) {
+				for (InvocationMethod m: getMethods(mapping.getSystemObject(), "validatePassword"))
+				{
+					result = Boolean.FALSE;
+					ExtensibleObject targetObject = objectTranslator.generateObject(eo, mapping, true);
+					try {
+						ExtensibleObjects response = invoke (m, targetObject, eo);
+						if (! response.getObjects().isEmpty() && !response.getObjects().get(0).isEmpty())
+							return Boolean.TRUE;
+					} catch (InternalErrorException | JSONException e) {
+						log.info("Error validating password: "+e.toString());
+					}
+				}
+			}
+		}
+		return result;
 	}
 
 	public void configureMappings(Collection<ExtensibleObjectMapping> mapping)
@@ -1813,9 +1901,9 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 			} else
 			{
 				JSONTokener tokener = new JSONTokener(text);
+				Object v = tokener.nextValue();
 				if (tokener.more())
 					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);
-				Object v = tokener.nextValue();
 				result.put("result", v);
 				if (tokener.more())
 					throw new InternalErrorException("Expecting JSON object from "+path+". Received:\n"+text);

@@ -12,13 +12,13 @@ public abstract class TokenHandlerOAuth extends AbstractAuthSecurityHandler impl
 
 	protected final String ACCESS_TOKEN = "access_token";
 	protected final String CLIENT_CREDENTIALS = "client_credentials";
-	protected final String CLIENT_ID = "client_id";
-	protected final String CLIENT_SECRET = "client_secret";
+	public final static String CLIENT_ID = "client_id";
+	public final static String CLIENT_SECRET = "client_secret";
 	protected final String EXPIRES_IN = "expires_in";
-	protected final String GRANT_TYPE = "grant_type";
+	public final static String GRANT_TYPE = "grant_type";
 	protected final String REFRESH_TOKEN = "refresh_token";
-	protected final String PASSWORD = "password";
-	protected final String USERNAME = "username";
+	public final static String PASSWORD = "password";
+	public final static String USERNAME = "username";
 	
 	private String tokenURL;
 	private String tokenAttribute;
