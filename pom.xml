@@ -1,10 +1,5 @@
 <?xml version="1.0"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:maven="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-	<parent>
-		<artifactId>plugins</artifactId>
-		<groupId>com.soffid.iam.sync</groupId>
-		<version>1.0.1</version>
-	</parent>
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.soffid.iam.sync.plugins</groupId>
 	<artifactId>rest-plugin</artifactId>
@@ -80,8 +75,8 @@
 	            <groupId>org.apache.maven.plugins</groupId>
 	            <artifactId>maven-compiler-plugin</artifactId>
 	            <configuration>
-	                <source>1.7</source>
-	                <target>1.7</target>
+	                <source>1.8</source>
+	                <target>1.8</target>
 	            </configuration>
 	        </plugin>
 			<plugin>
@@ -119,6 +114,22 @@
 					</execution>
 				</executions>
 			</plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+	      <version>2.4.2</version>
+	      <dependencies>
+	        <dependency>
+	          <groupId>org.apache.maven.scm</groupId>
+	          <artifactId>maven-scm-provider-gitexe</artifactId>
+	          <version>1.8.1</version>
+	        </dependency>
+	       </dependencies>
+        <configuration>
+          <preparationGoals>clean install integration-test</preparationGoals>
+          <goals>clean install deploy</goals>
+        </configuration>
+      </plugin>
 		</plugins>
 	</build>
 	<properties>
@@ -128,21 +139,17 @@
 	<pluginRepositories>
 		<pluginRepository>
 			<id>soffid-open</id>
-			<url>http://www.soffid.com/maven</url>
+			<url>https://download.soffid.com/maven</url>
 		</pluginRepository>
 	</pluginRepositories>
 	<repositories>
 		<repository>
 			<id>central</id>
-			<url>http://repo1.maven.org/maven2</url>
+			<url>https://repo1.maven.org/maven2</url>
 		</repository>
 		<repository>
 			<id>soffid-open</id>
-			<url>http://www.soffid.com/maven</url>
-		</repository>
-		<repository>
-			<id>jboss</id>
-			<url>https://repository.jboss.org/nexus/content/repositories/releases</url>
+			<url>https://download.soffid.com/maven</url>
 		</repository>
 	</repositories>
 	<distributionManagement>
