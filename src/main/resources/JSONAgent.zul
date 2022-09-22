@@ -162,7 +162,7 @@
 				for ( Component row: g.getRows().getChildren())
 				{
 					String template = row.getAttribute("template");
-					String templateName = row.getFirstChild().getFirstChild().getValue();
+					String templateName = row.getFirstChild().getValue();
 					org.json.JSONObject ob = new org.json.JSONObject();
 					ob.put("template", template);
 					ob.put("name", templateName);
@@ -484,13 +484,13 @@
 			<button id="finishButton" label="${c:l('editorJS.zul.Accepta')}">
 				<attribute name="onClick"><![CDATA[
 					Row r = pageScope.get("xmlCurrentRow");
-					r.setAttribute("template", editor.getValue());
+					r.setAttribute("template", self.getFellow("editor").getValue());
 					updateBlob();
 					edw.setVisible(false);
 				]]>
 				</attribute>
 			</button>
-			<button label="${c:l('editorJS.zul.Cancel·la')}" onClick="edv.setVisible(false)"/>
+			<button label="${c:l('editorJS.zul.Cancel·la')}" onClick="edw.setVisible(false)"/>
 		</div>								
 	</window>
 </div>
