@@ -94,10 +94,11 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 			log.info("TokenHandlerOAuthCC.requestNewToken() - result="+result);
 			fillResponseData(result);
 			if (getAuthToken() == null)
-				throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getMessage());
+				throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getStatusCode()+"\n"+result);
 		} else {
+			String r = response.getEntity(String.class);
 			log.info("TokenHandlerOAuthCC.requestNewToken() - response.getMessage()="+response.getMessage());
-			throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getMessage());
+			throw new ClientAuthenticationException("Unable to get auth token. Server returned "+response.getStatusCode()+"\n"+r);
 		}
 	}
 	

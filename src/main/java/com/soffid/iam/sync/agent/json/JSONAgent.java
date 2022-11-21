@@ -2655,33 +2655,42 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		else
 		{
 
-			Resource resource = client
-					.resource(command)
-					.contentType(MediaType.APPLICATION_JSON);
-//					.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_XML);
+			try {
+				Resource resource = client
+						.resource(command)
+						.contentType(MediaType.APPLICATION_JSON);
 
-			ClientResponse response = resource.invoke(verb, ClientResponse.class,
-					params == null ? null : new JSONObject(params));
-			
-			String mimeType = response.getHeaders().getFirst("Content-Type");
-			HashMap<String, Object> r = new HashMap<String, Object>();
-			if (mimeType.contains("json"))
-			{
-				String txt = response.getEntity(String.class);
-				parseJsonObject(null, command, txt, r);
-				if (debug && txt != null)
+				ClientResponse response = resource.invoke(verb, ClientResponse.class,
+						params == null ? null : new JSONObject(params));
+				
+				String mimeType = response.getHeaders().getFirst("Content-Type");
+				HashMap<String, Object> r = new HashMap<String, Object>();
+				if (mimeType.contains("json"))
 				{
-					log.info ("Result: "+txt);
+					String txt = response.getEntity(String.class);
+					parseJsonObject(null, command, txt, r);
+					if (debug && txt != null)
+					{
+						log.info ("Result: "+txt);
+					}
+				} else if (mimeType.contains("xml")){
+					byte[] data = response.getEntity(byte[].class);
+					parseXmlObject(null, command, data, r);
+				} else {
+					response.consumeContent();
+					throw new InternalErrorException("Unexpected response type " + mimeType);
 				}
-			} else if (mimeType.contains("xml")){
-				byte[] data = response.getEntity(byte[].class);
-				parseXmlObject(null, command, data, r);
-			} else {
-				throw new InternalErrorException("Unexpected response type " + mimeType);
+				LinkedList<Map<String,Object>> rl = new LinkedList<Map<String,Object>>();
+				rl.add(r);
+				return rl;
+			} catch (ClientWebException e) {
+				createClient();
+				throw new InternalErrorException ("Error "+e.getResponse().getStatusCode()+":"+e.getResponse().getMessage(),
+						e);
+			} catch (ClientRuntimeException e) {
+				createClient();
+				throw e;
 			}
-			LinkedList<Map<String,Object>> rl = new LinkedList<Map<String,Object>>();
-			rl.add(r);
-			return rl;
 		}
 	}
 
