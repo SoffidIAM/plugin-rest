@@ -1324,22 +1324,35 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		Account acc = getServer().getAccountInfo(accountName, getCodi());
 		if (acc == null)
 			return ;
-		ExtensibleObject object = user == null ?
+		ExtensibleObject soffidObject = user == null ?
 				new AccountExtensibleObject(acc, getServer()) :
 				new UserExtensibleObject(acc, user, getServer());
-		object.setAttribute("password", password.getPassword());
-		object.setAttribute("mustChange", mustChange);
+		soffidObject.setAttribute("password", password.getPassword());
+		soffidObject.setAttribute("mustChange", mustChange);
 		try {
 			for (ExtensibleObjectMapping mapping: objectMappings)
 			{
-				if (mapping.getSoffidObject().toString().equals(object.getObjectType()))
+				if (mapping.getSoffidObject().toString().equals(soffidObject.getObjectType()))
 				{
-					if (objectTranslator.evalCondition(object, mapping))
-					{
-		    			ExtensibleObject obj = objectTranslator.generateObject(object, mapping);
-		    			if (obj != null)
-		    				updateObject(object, obj);
-					}
+	    			ExtensibleObject targetObject = objectTranslator.generateObject(soffidObject, mapping);
+	    			if (targetObject != null) {
+	    				updateObject(soffidObject, targetObject);
+	    				ExtensibleObject existingObject = searchJsonObject(targetObject, soffidObject);
+	    				if (existingObject != null) {
+		    				boolean triggerRan = false;
+		    				ExtensibleObjects response = null;
+		    				for (InvocationMethod m: getMethods(targetObject.getObjectType(), "setPassword"))
+		    				{
+		    					if (triggerRan || runTrigger("preSetPassword", soffidObject, targetObject, existingObject))
+		    					{
+		    						triggerRan = true;
+		    						response = invoke (m, targetObject, soffidObject);
+		    					}
+		    					if (triggerRan)
+		    						runTrigger("postSetPassword", soffidObject, targetObject, existingObject, response);
+		    				}
+	    				}
+	    			}
 				}
 			}
 	
@@ -1598,7 +1611,11 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 						if (debug)
 							log.info("Invoking "+m.method+" on "+path+": "+params);
 
-						response = request.invoke(m.method, ClientResponse.class, params);
+						try {
+							response = request.invoke(m.method, ClientResponse.class, params);
+						} catch (ClientWebException ee) {
+							response = ee.getResponse();
+						}
 					}
 				}
 
@@ -2545,7 +2562,24 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		return runTrigger (triggerType, soffidObject, newObject, oldObject, null);
 	}
 
+	protected boolean runTrigger (String triggerType,
+			ExtensibleObject soffidObject,
+			ExtensibleObject newObject,
+			ExtensibleObject oldObject) throws InternalErrorException
+	{
+		return runTrigger (triggerType, soffidObject, newObject, oldObject, null);
+	}
+
 	protected boolean runTrigger (SoffidObjectTrigger triggerType,
+			ExtensibleObject soffidObject,
+			ExtensibleObject newObject,
+			ExtensibleObject oldObject,
+			ExtensibleObjects response) throws InternalErrorException
+	{
+		return runTrigger(triggerType.toString(), soffidObject, newObject, oldObject);
+	}
+
+	protected boolean runTrigger (String triggerType,
 			ExtensibleObject soffidObject,
 			ExtensibleObject newObject,
 			ExtensibleObject oldObject,
@@ -2566,7 +2600,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		
 	}
 
-	protected boolean runTriggerStep2(SoffidObjectTrigger triggerType, ExtensibleObject soffidObject,
+	protected boolean runTriggerStep2(String triggerType, ExtensibleObject soffidObject,
 			ExtensibleObject newObject, ExtensibleObject oldObject, ExtensibleObjects response, SoffidObjectType sot)
 			throws InternalErrorException {
 		for ( ExtensibleObjectMapping eom : objectTranslator.getObjectsBySoffidType(sot))
@@ -2577,7 +2611,7 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 				{
 					for ( ObjectMappingTrigger trigger: eom.getTriggers())
 					{
-						if (trigger.getTrigger().equals (triggerType))
+						if (trigger.getTrigger().toString().equals (triggerType))
 						{
 							log.info("  found "+trigger.getScript());
 							ExtensibleObject eo = new ExtensibleObject();
@@ -2694,5 +2728,27 @@ public class JSONAgent extends Agent implements ExtensibleObjectMgr, UserMgr, Re
 		}
 	}
 
+	public void checkConnectivity() throws InternalErrorException {
+		for (ExtensibleObjectMapping mapping: objectMappings)
+		{
+			if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_ACCOUNT))
+			{
+				ExtensibleObject s = new ExtensibleObject();
+				s.setObjectType(mapping.getSoffidObject().toString());
+				ExtensibleObject eo = objectTranslator.generateObject(s, mapping, true);
+				
+				try {
+					for (InvocationMethod m: getMethods(eo.getObjectType(), "load"))
+					{
+						PaginationStatus p = new PaginationStatus();
+						p.setAuto(false);
+						invoke(m, eo, s, p);
+					}
+				} catch (JSONException e) {
+					throw new InternalErrorException("Error parsing response", e);
+				}
+			}
+		}
+	}
 }
 	
