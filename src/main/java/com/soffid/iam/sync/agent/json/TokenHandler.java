@@ -33,7 +33,7 @@ public class TokenHandler extends AbstractAuthSecurityHandler implements ClientH
 	private String basicPassword;
 	private String authURL;
 	private String authToken;
-	private DefaultHttpClient httpClient;
+	private ApacheHttpClientConfig config;
 
 	public String getBasicUser() {
 		return basicUser;
@@ -51,17 +51,16 @@ public class TokenHandler extends AbstractAuthSecurityHandler implements ClientH
 		this.basicPassword = basicPassword;
 	}
 
-	public TokenHandler ( String authURL, String user, String password, DefaultHttpClient httpClient)
+	public TokenHandler ( String authURL, String user, String password, ApacheHttpClientConfig config2)
 	{
 		this.authURL = authURL;
 		this.user = user;
 		this.password = password;
-		this.httpClient = httpClient;
+		this.config =  config2;
 	}
 	
 	private void getAuthToken () throws JSONException
 	{
-		ClientConfig config = new ApacheHttpClientConfig(httpClient);
 		if (basicUser != null && basicPassword != null)
 			config.handlers(new BasicAuthSecurityHandler(basicUser, basicPassword));
 		

@@ -6,19 +6,22 @@ import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.handlers.AbstractAuthSecurityHandler;
 import org.apache.wink.client.handlers.ClientHandler;
 import org.apache.wink.client.handlers.HandlerContext;
+import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class BasicAuthSecurityHandler extends AbstractAuthSecurityHandler implements ClientHandler {
 
     private static Logger    logger       = LoggerFactory.getLogger(BasicAuthSecurityHandler.class);
+	private ApacheHttpClientConfig config;
 
     public BasicAuthSecurityHandler() {
         /* do nothing */
     }
 
-    public BasicAuthSecurityHandler(final String username, final String password, DefaultHttpClient httpClient) {
+    public BasicAuthSecurityHandler(final String username, final String password, ApacheHttpClientConfig config2) {
         super(username, password);
+        this.config = config2;
     }
 
     /**

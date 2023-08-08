@@ -20,6 +20,7 @@ import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.Resource;
 import org.apache.wink.client.RestClient;
 import org.apache.wink.client.handlers.HandlerContext;
+import org.apache.wink.client.httpclient.ApacheHttpClientConfig;
 import org.apache.wink.common.http.HttpStatus;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,21 +30,23 @@ import es.caib.seycon.ng.comu.Password;
 public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 
 	Log log = LogFactory.getLog(getClass());
+	private ApacheHttpClientConfig config;
 
 	public TokenHandlerOAuthImpl(String tokenURL, String user, Password password, String tokenAttribute,
-			Map<String, String> oauthParams) {
+			Map<String, String> oauthParams, ApacheHttpClientConfig config) {
 		setTokenURL(tokenURL);
 		setUser(user);
 		setPassword(password);
 		setTokenAttribute(tokenAttribute);
 		setOauthParams(oauthParams);
+		this.config = config;
 	}
 
 	public ClientResponse handle(ClientRequest request, HandlerContext context) throws Exception {
 		if (getAuthToken() == null || checkExpiredToken())
 			requestAuthToken();
 		if (getAuthToken() != null) {
-			String auth = ("Bearer "+getAuthToken());
+			String auth = ("Bearer "+getAuthToken( ));
 			if (request.getHeaders().containsKey("Authorization")) {
 				List<String> list = request.getHeaders().get("Authorization");
 				list.add(auth);
@@ -76,7 +79,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 	 * @throws UnsupportedEncodingException 
 	 */
 	private void requestNewToken() throws JSONException, UnsupportedEncodingException {
-		RestClient client = new RestClient();
+		RestClient client = new RestClient(config);
 		Resource rsc = client.resource(getTokenURL());
 		boolean authBasicRequired = isBasicAuthRequired();
 		if (authBasicRequired) {
@@ -117,7 +120,7 @@ public class TokenHandlerOAuthImpl extends TokenHandlerOAuth {
 	 * @throws UnsupportedEncodingException 
 	 */
 	private void requestWithToken() throws JSONException, UnsupportedEncodingException {
-		RestClient client = new RestClient();
+		RestClient client = new RestClient(config);
 		Resource rsc = client.resource(getTokenURL());
 		ClientResponse response = rsc
 				.contentType(MediaType.APPLICATION_FORM_URLENCODED)

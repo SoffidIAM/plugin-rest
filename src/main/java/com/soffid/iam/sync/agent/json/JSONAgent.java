@@ -7,8 +7,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Proxy.Type;
-import java.nio.charset.StandardCharsets;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.rmi.RemoteException;
 import java.util.Collection;
 import java.util.Collections;
@@ -19,7 +19,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 import javax.ws.rs.core.MediaType;
@@ -37,7 +36,6 @@ import javax.xml.transform.stream.StreamResult;
 
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
-import org.apache.wink.client.ClientAuthenticationException;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientRuntimeException;
 import org.apache.wink.client.ClientWebException;
@@ -56,7 +54,6 @@ import org.w3c.dom.Node;
 import org.w3c.dom.Text;
 
 import com.soffid.iam.api.AccountStatus;
-import com.soffid.iam.api.RoleGrant;
 import com.soffid.iam.remote.RemoteServiceLocator;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuth;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuthImpl;
@@ -92,7 +89,6 @@ import es.caib.seycon.ng.sync.intf.GroupMgr;
 import es.caib.seycon.ng.sync.intf.ReconcileMgr2;
 import es.caib.seycon.ng.sync.intf.RoleMgr;
 import es.caib.seycon.ng.sync.intf.UserMgr;
-import es.caib.seycon.util.Base64;
 
 /**
  * Agente que gestiona los usuarios y contraseñas del LDAP Hace uso de las
@@ -208,7 +204,6 @@ public class JSONAgent extends Agent
 	}
 
 	protected void createClient() {
-
 		DefaultHttpClient httpClient = new DefaultHttpClient();
 		DefaultHttpClient httpClient2 = new DefaultHttpClient();
 		if (proxyHost != null && !proxyHost.trim().isEmpty()) {
@@ -223,18 +218,21 @@ public class JSONAgent extends Agent
 		}
 		config = new ApacheHttpClientConfig(httpClient);
 
+		ApacheHttpClientConfig config2 = new ApacheHttpClientConfig(httpClient2);
+		config2.setChunked(false);
+		
 		if ("token".equals(authMethod)) {
-			TokenHandler handler = new TokenHandler(authUrl, loginDN, password.getPassword(), httpClient2);
+			TokenHandler handler = new TokenHandler(authUrl, loginDN, password.getPassword(), config2);
 			config.handlers(handler);
 		}
 		if ("basic".equals(authMethod)) {
 			BasicAuthSecurityHandler handler = new BasicAuthSecurityHandler(loginDN, password.getPassword(),
-					httpClient2);
+					config2);
 			config.handlers(handler);
 		}
 		if ("tokenOAuthCC".equals(authMethod) || "tokenOAuthPG".equals(authMethod)) {
 			TokenHandlerOAuth handler = new TokenHandlerOAuthImpl(authUrl, loginDN, password, tokenAttribute,
-					oauthParams);
+					oauthParams, config2);
 			config.handlers(handler);
 		}
 		config.setChunked(false);
@@ -1403,8 +1401,6 @@ public class JSONAgent extends Agent
 							debugObject("post object: ", object, "  ");
 						String params = encode(m, object);
 						byte[] b = params.getBytes(StandardCharsets.UTF_8);
-						request.header("Content-length", Integer.toString(b.length));
-
 						if (debug)
 							log.info("Invoking POST on " + path + ": " + params);
 
@@ -1418,7 +1414,6 @@ public class JSONAgent extends Agent
 							log.info("Invoking PUT on " + path + ": " + params);
 
 						byte[] b = params.getBytes(StandardCharsets.UTF_8);
-						request.header("Content-length", Integer.toString(b.length));
 						response = request.put(b);
 					} else if ("delete".equalsIgnoreCase(m.method)) {
 						if (m.encoding == null)
@@ -1441,7 +1436,6 @@ public class JSONAgent extends Agent
 
 						try {
 							byte[] b = params.getBytes(StandardCharsets.UTF_8);
-							request.header("Content-length", Integer.toString(b.length));
 							response = request.invoke(m.method, ClientResponse.class, b);
 						} catch (ClientWebException ee) {
 							response = ee.getResponse();
