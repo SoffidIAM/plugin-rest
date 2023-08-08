@@ -79,7 +79,6 @@ maven_release:
     - git remote -v
     - git push gitlab "$CI_COMMIT_BRANCH"
     - git push gitlab --tags
-skip=true"
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
       when: manual
