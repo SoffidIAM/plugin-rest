@@ -2265,23 +2265,15 @@ public class JSONAgent extends Agent
 		log.info("  newObjectType " + (newObject == null ? "null" : newObject.getObjectType()));
 		log.info("  soffidType    " + (soffidObject == null ? "null" : soffidObject.getObjectType()));
 		log.info("  response      " + (response == null ? "null" : response.toString()));
-		SoffidObjectType sot = SoffidObjectType.fromString(soffidObject.getObjectType());
-		if (sot == SoffidObjectType.OBJECT_GRANT)
-			return runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response,
-					SoffidObjectType.OBJECT_GRANT)
-					&& runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response,
-							SoffidObjectType.OBJECT_ALL_GRANTED_ROLES)
-					&& runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response,
-							SoffidObjectType.OBJECT_GRANTED_ROLE);
-		else
-			return runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response, sot);
+		String type = newObject == null ? oldObject.getObjectType(): newObject.getObjectType();
+		return runTriggerStep2(triggerType, soffidObject, newObject, oldObject, response, type);
 
 	}
 
 	protected boolean runTriggerStep2(String triggerType, ExtensibleObject soffidObject, ExtensibleObject newObject,
-			ExtensibleObject oldObject, ExtensibleObjects response, SoffidObjectType sot)
+			ExtensibleObject oldObject, ExtensibleObjects response, String sot)
 			throws InternalErrorException {
-		for (ExtensibleObjectMapping eom : objectTranslator.getObjectsBySoffidType(sot)) {
+		for (ExtensibleObjectMapping eom : objectTranslator.getObjects()) {
 			if (oldObject == null || oldObject.getObjectType().equals(eom.getSystemObject())) {
 				if (newObject == null || newObject.getObjectType().equals(eom.getSystemObject())) {
 					for (ObjectMappingTrigger trigger : eom.getTriggers()) {
