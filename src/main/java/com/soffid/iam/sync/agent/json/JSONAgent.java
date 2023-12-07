@@ -2255,7 +2255,7 @@ public class JSONAgent extends Agent
 	protected boolean runTrigger(SoffidObjectTrigger triggerType, ExtensibleObject soffidObject,
 			ExtensibleObject newObject, ExtensibleObject oldObject, ExtensibleObjects response)
 			throws InternalErrorException {
-		return runTrigger(triggerType.toString(), soffidObject, newObject, oldObject);
+		return runTrigger(triggerType.toString(), soffidObject, newObject, oldObject, response);
 	}
 
 	protected boolean runTrigger(String triggerType, ExtensibleObject soffidObject, ExtensibleObject newObject,
