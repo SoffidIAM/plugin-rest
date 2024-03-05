@@ -716,7 +716,7 @@ public class JSONAgent extends Agent
 		}
 	}
 
-	private void updateAccountGrants(String accountName) throws InternalErrorException {
+	private void updateAccountGrants(String accountName, boolean isDisabled) throws InternalErrorException {
 		try {
 			for (ExtensibleObjectMapping mapping : objectMappings) {
 				String prop = mapping.getProperties().get("drivenByRole");
@@ -725,8 +725,11 @@ public class JSONAgent extends Agent
 						|| mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GRANTED_ROLE))) {
 					if (debug)
 						log.info("Using " + mapping.getSystemObject() + " mapping to update " + accountName + " roles");
+					
 					Collection<RolGrant> grants = getServer().getAccountRoles(accountName, getCodi());
-
+					String remove = mapping.getProperties().get("removeForDisabledAccounts");
+					if ("true".equals(remove) && isDisabled)
+						grants.clear();
 					RolGrant rg = new RolGrant();
 					rg.setDispatcher(getCodi());
 					rg.setOwnerAccountName(accountName);
@@ -1123,7 +1126,7 @@ public class JSONAgent extends Agent
 						updateObject(sourceObject, obj);
 						ExtensibleObject existingObject = searchJsonObject(obj, sourceObject);
 						if (existingObject != null)
-							updateAccountGrants(acc.getName());
+							updateAccountGrants(acc.getName(), acc.isDisabled());
 					}
 				}
 			}
@@ -1153,7 +1156,7 @@ public class JSONAgent extends Agent
 						updateObject(sourceObject, obj);
 						ExtensibleObject existingObject = searchJsonObject(sourceObject, obj);
 						if (existingObject != null)
-							updateAccountGrants(acc.getName());
+							updateAccountGrants(acc.getName(), acc.isDisabled());
 					}
 				}
 			}
