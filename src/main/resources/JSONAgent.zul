@@ -442,6 +442,17 @@
 					</listitem>
 				</listbox>
 			</row>
+			<row>
+				<input_etiqueta value="Delta changes" />
+				<listbox bind="@param9" mold="select"  disabled="{!canModifyAgent}" width="100px">
+					<listitem value="false">
+						<listcell label="No"/>
+					</listitem>
+					<listitem value="true">
+						<listcell label="Yes"/>
+					</listitem>
+				</listbox>
+			</row>
 			<row >
 				<input_etiqueta value="Proxy host" />
 				<hbox width="90%">

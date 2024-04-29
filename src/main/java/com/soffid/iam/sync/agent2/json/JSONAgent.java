@@ -90,7 +90,7 @@ public class JSONAgent extends com.soffid.iam.sync.agent.json.JSONAgent
 					{
 		    			ExtensibleObject target = objectTranslator.generateObject(sourceObject, mapping);
 		    			if (obj != null)
-		    				updateObject(sourceObject, target);
+		    				updateObject(null, sourceObject, target);
 					}
 					else
 					{

@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Proxy.Type;
@@ -54,7 +55,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.Text;
 
 import com.soffid.iam.api.AccountStatus;
-import com.soffid.iam.remote.RemoteServiceLocator;
+import com.soffid.iam.api.HostService;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuth;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuthImpl;
 
@@ -67,9 +68,11 @@ import es.caib.seycon.ng.comu.RolGrant;
 import es.caib.seycon.ng.comu.SoffidObjectTrigger;
 import es.caib.seycon.ng.comu.SoffidObjectType;
 import es.caib.seycon.ng.comu.Usuari;
+import es.caib.seycon.ng.exception.AccountAlreadyExistsException;
 import es.caib.seycon.ng.exception.InternalErrorException;
 import es.caib.seycon.ng.exception.UnknownRoleException;
 import es.caib.seycon.ng.exception.UnknownUserException;
+import es.caib.seycon.ng.remote.RemoteServiceLocator;
 import es.caib.seycon.ng.sync.agent.Agent;
 import es.caib.seycon.ng.sync.engine.extobj.AccountExtensibleObject;
 import es.caib.seycon.ng.sync.engine.extobj.ExtensibleObjectFinder;
@@ -125,6 +128,7 @@ public class JSONAgent extends Agent
 	Map<String, Set<String>> userRoles = new HashMap<String, Set<String>>();
 	Map<String, String> templates = new HashMap<String, String>();
 	Map<String, String> oauthParams = new HashMap<String, String>();
+	private boolean deltaChanges;
 
 	/**
 	 * Constructor
@@ -157,6 +161,7 @@ public class JSONAgent extends Agent
 		serverUrl = getDispatcher().getParam4();
 		tokenAttribute = getDispatcher().getParam7();
 		debug = "true".equals(getDispatcher().getParam8());
+		deltaChanges = "true".equals(getDispatcher().getParam9());
 
 		try {
 			if (getDispatcher().getBlobParam() != null && getDispatcher().getBlobParam().length > 0) {
@@ -357,7 +362,7 @@ public class JSONAgent extends Agent
 						if (objectTranslator.evalCondition(sourceObject, mapping)) {
 							ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 							if (obj != null)
-								updateObject(sourceObject, obj);
+								updateObject(null, sourceObject, obj);
 						} else {
 							removeRole(rol.getNom(), rol.getBaseDeDades());
 						}
@@ -409,7 +414,7 @@ public class JSONAgent extends Agent
 					if (objectTranslator.evalCondition(sourceObject, mapping)) {
 						ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 						if (obj != null)
-							updateObject(sourceObject, obj);
+							updateObject(null, sourceObject, obj);
 					} else {
 						removeGroup(name);
 					}
@@ -716,8 +721,9 @@ public class JSONAgent extends Agent
 		}
 	}
 
-	private void updateAccountGrants(String accountName, boolean isDisabled) throws InternalErrorException {
+	private void updateAccountGrants(Account account, boolean isDisabled) throws Exception {
 		try {
+			String accountName = account.getName();
 			for (ExtensibleObjectMapping mapping : objectMappings) {
 				String prop = mapping.getProperties().get("drivenByRole");
 				if (prop == null && (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GRANT)
@@ -726,7 +732,7 @@ public class JSONAgent extends Agent
 					if (debug)
 						log.info("Using " + mapping.getSystemObject() + " mapping to update " + accountName + " roles");
 					
-					Collection<RolGrant> grants = getServer().getAccountRoles(accountName, getCodi());
+					List<RolGrant> grants = new LinkedList<>(getServer().getAccountRoles(accountName, getCodi()));
 					String remove = mapping.getProperties().get("removeForDisabledAccounts");
 					if ("true".equals(remove) && isDisabled)
 						grants.clear();
@@ -741,6 +747,9 @@ public class JSONAgent extends Agent
 						mapping.setCondition(null);
 						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
 						if (jsonObj != null) {
+							boolean foundSelect = false;
+							final LinkedList<RolGrant> existingRoles = new LinkedList<>();
+							final LinkedList<ExtensibleObject> existingJsonObject = new LinkedList<>();
 							ExtensibleObjects jsonStoredObjects = searchJsonObjects(jsonObj, geo);
 							if (jsonStoredObjects != null) {
 								for (ExtensibleObject jsonObject : jsonStoredObjects.getObjects()) {
@@ -748,59 +757,63 @@ public class JSONAgent extends Agent
 											mapping);
 									if (grantObject != null) {
 										RolGrant grant = vom.parseGrant(grantObject);
-
+										
 										if (grant != null) {
-											boolean found = false;
-											for (RolGrant grant2 : new LinkedList<RolGrant>(grants)) {
-												if (grant2.getRolName().equals(grant.getRolName())) {
-													if (grant.getDomainValue() == null
-															|| grant.getDomainValue().equals(grant2.getDomainValue())) {
-														found = true;
-														grants.remove(grant2);
-														break;
-													}
-												}
-											}
-											if (!found) {
-												if (debug) {
-													debugObject("Removing grant ", jsonObject, "");
-												}
-												boolean triggerRan = false;
-												for (InvocationMethod m : getMethods(jsonObject.getObjectType(),
-														"delete")) {
-													if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_DELETE, geo,
-															jsonObject, jsonObject)) {
-														triggerRan = true;
-														if (debug) {
-															debugObject("Removing grant ", jsonObject, "");
-														}
-														invoke(m, jsonObject, grantObject);
-													}
-												}
-												if (triggerRan)
-													runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject,
-															jsonObject);
-											}
+											existingJsonObject.add(jsonObject);
+											existingRoles.add(grant);
 										}
 									}
 								}
-							}
-							if (debug)
-								log.info("Adding new grants");
-							for (RolGrant grant : grants) {
-								grant.setOwnerAccountName(accountName);
-								grant.setOwnerDispatcher(getCodi());
-								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
-								ExtensibleObject targetObject = objectTranslator.generateObject(sourceObject, mapping);
-								boolean triggerRan = false;
-								for (InvocationMethod m : getMethods(targetObject.getObjectType(), "insert")) {
-									if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject,
-											targetObject, null)) {
-										triggerRan = true;
-										invoke(m, targetObject, sourceObject);
+								new DeltaChangesManager(log).apply(account, existingRoles, grants, getServer(), deltaChanges, new RoleGrantDeltaChangesAction() {
+									@Override
+									public void remove(RolGrant currentGrant) throws Exception {
+										int pos = existingRoles.indexOf(currentGrant);
+										if (pos >= 0) {
+											ExtensibleObject jsonObject = existingJsonObject.get(pos);
+											if (debug) {
+												debugObject("Removing grant ", jsonObject, "");
+											}
+											boolean triggerRan = false;
+											for (InvocationMethod m : getMethods(jsonObject.getObjectType(),
+													"delete")) {
+												if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_DELETE, geo,
+														jsonObject, jsonObject)) {
+													triggerRan = true;
+													if (debug) {
+														debugObject("Removing grant ", jsonObject, "");
+													}
+													invoke(m, jsonObject, new GrantExtensibleObject(currentGrant, getServer()));
+												}
+											}
+											if (triggerRan)
+												runTrigger(SoffidObjectTrigger.POST_DELETE, geo, jsonObject,
+														jsonObject);
+										}
 									}
-								}
-								runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+									
+									@Override
+									public void add(RolGrant grant) throws Exception {
+										int pos = existingRoles.indexOf(grant);
+										if (pos >= 0) {
+											grant.setOwnerAccountName(accountName);
+											grant.setOwnerDispatcher(getCodi());
+											GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
+											ExtensibleObject targetObject = objectTranslator.generateObject(sourceObject, mapping);
+											boolean triggerRan = false;
+											if (debug) {
+												debugObject("Adding grant ", targetObject, "");
+											}
+											for (InvocationMethod m : getMethods(targetObject.getObjectType(), "insert")) {
+												if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject,
+														targetObject, null)) {
+													triggerRan = true;
+													invoke(m, targetObject, sourceObject);
+												}
+											}
+											runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+										}
+									}
+								});
 							}
 						}
 					} finally {
@@ -930,6 +943,15 @@ public class JSONAgent extends Agent
 								debugObject("got object", scimStoredObject, "");
 
 								acc = vom.parseAccount(objectTranslator.parseInputObject(scimStoredObject, mapping));
+								if (deltaChanges && acc != null) {
+									try {
+										new DeltaChangesManager(log).updateDeltaAttribute(acc, getAccountGrants(acc.getName()));
+									} catch (InternalErrorException e) {
+										throw e;
+									} catch (Exception e) {
+										throw new InternalErrorException("Error generating current status attribute", e);
+									}
+								}
 								if (acc != null) {
 									if (debug)
 										log.info("Parsed account: " + acc.toString());
@@ -1064,7 +1086,7 @@ public class JSONAgent extends Agent
 	}
 
 	public void removeUser(String accountName) throws RemoteException, InternalErrorException {
-		com.soffid.iam.api.Account acc2;
+		Account acc2;
 		try {
 			acc2 = new RemoteServiceLocator(getServerName()).getAccountService().findAccount(accountName, getCodi());
 		} catch (IOException e1) {
@@ -1081,16 +1103,16 @@ public class JSONAgent extends Agent
 		} else if (acc2.getStatus() == AccountStatus.REMOVED) {
 			try {
 				Usuari u = getServer().getUserInfo(accountName, getCodi());
-				removeScimUser(Account.toAccount(acc2), u);
+				removeScimUser(acc2, u);
 			} catch (UnknownUserException e) {
-				removeScimUser(Account.toAccount(acc2), null);
+				removeScimUser(acc2, null);
 			}
 		} else {
 			try {
 				Usuari u = getServer().getUserInfo(accountName, getCodi());
-				updateUser(Account.toAccount(acc2), u);
+				updateUser(acc2, u);
 			} catch (UnknownUserException e) {
-				updateUser(Account.toAccount(acc2));
+				updateUser(acc2);
 			}
 		}
 	}
@@ -1123,10 +1145,10 @@ public class JSONAgent extends Agent
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_USER)) {
 					ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 					if (obj != null) {
-						updateObject(sourceObject, obj);
+						updateObject(acc, sourceObject, obj);
 						ExtensibleObject existingObject = searchJsonObject(obj, sourceObject);
 						if (existingObject != null)
-							updateAccountGrants(acc.getName(), acc.isDisabled());
+							updateAccountGrants(acc, acc.isDisabled());
 					}
 				}
 			}
@@ -1153,10 +1175,10 @@ public class JSONAgent extends Agent
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_ACCOUNT)) {
 					ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 					if (obj != null) {
-						updateObject(sourceObject, obj);
+						updateObject(acc, sourceObject, obj);
 						ExtensibleObject existingObject = searchJsonObject(sourceObject, obj);
 						if (existingObject != null)
-							updateAccountGrants(acc.getName(), acc.isDisabled());
+							updateAccountGrants(acc, acc.isDisabled());
 					}
 				}
 			}
@@ -1181,7 +1203,7 @@ public class JSONAgent extends Agent
 				if (mapping.getSoffidObject().toString().equals(soffidObject.getObjectType())) {
 					ExtensibleObject targetObject = objectTranslator.generateObject(soffidObject, mapping);
 					if (targetObject != null) {
-						updateObject(soffidObject, targetObject);
+						updateObject(acc, soffidObject, targetObject);
 						ExtensibleObject existingObject = searchJsonObject(targetObject, soffidObject);
 						if (existingObject != null) {
 							boolean triggerRan = false;
@@ -2116,11 +2138,12 @@ public class JSONAgent extends Agent
 		return methods;
 	}
 
-	protected void updateObject(ExtensibleObject soffidObject, ExtensibleObject targetObject)
-			throws InternalErrorException {
+	protected void updateObject(Account acc, ExtensibleObject soffidObject, ExtensibleObject targetObject)
+			throws InternalErrorException { 
 		try {
 			ExtensibleObject existingObject = searchJsonObject(targetObject, soffidObject);
 
+			ExtensibleObject obj2 = targetObject;
 			if (existingObject == null) {
 				boolean triggerRan = false;
 				ExtensibleObjects response = null;
@@ -2135,6 +2158,9 @@ public class JSONAgent extends Agent
 								response);
 				}
 			} else {
+				if (acc != null && deltaChanges)
+					targetObject = new DeltaChangesManager(log).merge(acc, existingObject, targetObject, 
+							getServer(), deltaChanges);
 				boolean triggerRan = false;
 				ExtensibleObjects response = null;
 				for (InvocationMethod m : getMethods(targetObject.getObjectType(), "update")) {
@@ -2146,6 +2172,23 @@ public class JSONAgent extends Agent
 					if (triggerRan)
 						runTrigger(SoffidObjectTrigger.POST_UPDATE, soffidObject, targetObject, existingObject,
 								response);
+				}
+			}
+			if (acc != null && deltaChanges) {
+				if (new DeltaChangesManager(log).updateDeltaAttribute(acc, obj2))
+				{
+					try {
+						Method m = getServer().getClass().getMethod("reconcileAccount", Account.class, List.class);
+						getServer().reconcileAccount(acc, null);
+					} catch (NoSuchMethodException e) {
+						try {
+							new RemoteServiceLocator().getAccountService().updateAccount2(acc);
+						} catch (AccountAlreadyExistsException e1) {
+							throw new InternalErrorException("Error updating account snapshot", e1);
+						} catch (IOException e1) {
+							throw new InternalErrorException("Error updating account snapshot", e1);
+						}
+					}
 				}
 			}
 		} catch (Exception e) {
@@ -2406,12 +2449,17 @@ public class JSONAgent extends Agent
 
 	public void updateExtensibleObject(ExtensibleObject obj) throws RemoteException, InternalErrorException {
 		for (ExtensibleObject target: objectTranslator.generateObjects(obj).getObjects())
-			updateObject(obj, target);
+			updateObject(null, obj, target);
 	}
 
 	public void removeExtensibleObject(ExtensibleObject obj) throws RemoteException, InternalErrorException {
 		for (ExtensibleObject target: objectTranslator.generateObjects(obj).getObjects())
 			removeObject(obj, target);
+	}
+
+	@Override
+	public List<HostService> getHostServices() throws RemoteException, InternalErrorException {
+		return new LinkedList<>();
 	}
 
 }
