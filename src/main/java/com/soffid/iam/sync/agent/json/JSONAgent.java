@@ -716,13 +716,23 @@ public class JSONAgent extends Agent
 		}
 	}
 
-	private void updateAccountGrants(String accountName) throws InternalErrorException {
+	private void updateAccountGrants(String accountName, ExtensibleObject object, ExtensibleObject sourceObject) throws InternalErrorException {
 		try {
 			for (ExtensibleObjectMapping mapping : objectMappings) {
 				String prop = mapping.getProperties().get("drivenByRole");
 				if (prop == null && (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GRANT)
 						|| mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_ALL_GRANTED_ROLES)
 						|| mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_GRANTED_ROLE))) {
+
+					// Check if the account actually exists before the grant update
+					ExtensibleObject existingObject = searchJsonObject(object, sourceObject);
+					if (existingObject==null) {
+						if (debug) {
+							log.warn("Stop trying to updateAccountGrants because the account \""+accountName+"\" does not exist in the final system.");
+							return;
+						}
+					}
+
 					if (debug)
 						log.info("Using " + mapping.getSystemObject() + " mapping to update " + accountName + " roles");
 					Collection<RolGrant> grants = getServer().getAccountRoles(accountName, getCodi());
@@ -787,17 +797,17 @@ public class JSONAgent extends Agent
 							for (RolGrant grant : grants) {
 								grant.setOwnerAccountName(accountName);
 								grant.setOwnerDispatcher(getCodi());
-								GrantExtensibleObject sourceObject = new GrantExtensibleObject(grant, getServer());
-								ExtensibleObject targetObject = objectTranslator.generateObject(sourceObject, mapping);
+								GrantExtensibleObject grantSourceObject = new GrantExtensibleObject(grant, getServer());
+								ExtensibleObject targetObject = objectTranslator.generateObject(grantSourceObject, mapping);
 								boolean triggerRan = false;
 								for (InvocationMethod m : getMethods(targetObject.getObjectType(), "insert")) {
-									if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, sourceObject,
+									if (triggerRan || runTrigger(SoffidObjectTrigger.PRE_INSERT, grantSourceObject,
 											targetObject, null)) {
 										triggerRan = true;
-										invoke(m, targetObject, sourceObject);
+										invoke(m, targetObject, grantSourceObject);
 									}
 								}
-								runTrigger(SoffidObjectTrigger.POST_INSERT, sourceObject, targetObject, null);
+								runTrigger(SoffidObjectTrigger.POST_INSERT, grantSourceObject, targetObject, null);
 							}
 						}
 					} finally {
@@ -1121,9 +1131,7 @@ public class JSONAgent extends Agent
 					ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 					if (obj != null) {
 						updateObject(sourceObject, obj);
-						ExtensibleObject existingObject = searchJsonObject(obj, sourceObject);
-						if (existingObject != null)
-							updateAccountGrants(acc.getName());
+						updateAccountGrants(acc.getName(), obj, sourceObject);
 					}
 				}
 			}
@@ -1151,9 +1159,7 @@ public class JSONAgent extends Agent
 					ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 					if (obj != null) {
 						updateObject(sourceObject, obj);
-						ExtensibleObject existingObject = searchJsonObject(sourceObject, obj);
-						if (existingObject != null)
-							updateAccountGrants(acc.getName());
+						updateAccountGrants(acc.getName(), obj, sourceObject);
 					}
 				}
 			}
