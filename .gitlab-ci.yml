@@ -30,7 +30,7 @@ cache:
       - $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # Verify merge requests using JDK8
-verify:jdk8:
+verify:jdk11:
   <<: *verify
 
 # To deploy packages from CI, create a ci_settings.xml file
