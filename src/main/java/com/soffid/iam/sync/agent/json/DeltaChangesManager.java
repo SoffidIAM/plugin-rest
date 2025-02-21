@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -17,13 +19,18 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import org.apache.commons.io.output.ByteArrayOutputStream;
+import org.bouncycastle.asn1.ocsp.ServiceLocator;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
 
+import com.soffid.iam.EJBLocator;
+import com.soffid.iam.api.Role;
+
 import es.caib.seycon.ng.comu.Account;
+import es.caib.seycon.ng.comu.RolAccount;
 import es.caib.seycon.ng.comu.RolGrant;
 import es.caib.seycon.ng.exception.AccountAlreadyExistsException;
 import es.caib.seycon.ng.exception.InternalErrorException;
@@ -47,31 +54,46 @@ public class DeltaChangesManager {
 
 	public void apply(Account acc, List<RolGrant> currentGrants, List<RolGrant> newGrants, ServerService svc, boolean delta, RoleGrantDeltaChangesAction action) 
 			throws Exception {
+		
+		List<RolGrant> grantResults = new ArrayList<RolGrant>(newGrants);
+		log.info("Azure granted Roles --> "+currentGrants);
+		log.info("Soffid granted Roles --> "+newGrants);
+		
 		if (delta) {
 			List<RolGrant> previousGrants = getPreviousGrants(acc);
-			for (RolGrant newGrant: newGrants) {
+			log.info("Delta-variable granted Roles --> "+previousGrants);
+			for (RolGrant newGrant: newGrants) { 
+				log.info("newGrant -> "+newGrant.getRolName());
 				RolGrant cg = find(newGrant, previousGrants) ;
-				if ( cg != null) { // Already asigned in the past => ignore
+				if ( cg != null) { // Already asigned in the past => ignore 
 					previousGrants.remove(cg);
-					if (find(newGrant, currentGrants) == null)
+					if (find(newGrant, currentGrants) == null) {
 						log.warn("Permission "+newGrant.getRolName()+" has been removed locally");
+						grantResults.remove(newGrant);
+					}
+					
 				}
-				else if (find(newGrant, currentGrants) == null) {
+				else if (find(newGrant, currentGrants) == null) { 
 					action.add(newGrant);
 				}
 			}
-			for (RolGrant oldGrant: previousGrants) {
-				RolGrant cg = find(oldGrant, currentGrants) ;
-				if ( cg != null) { // Grant must be removed
+			for (RolGrant oldGrant: previousGrants) { 		
+				RolGrant cg = find(oldGrant, currentGrants);
+				if ( cg != null) { 
 					action.remove(cg);
 				}
 			}
-			for (RolGrant grant: currentGrants) {
-				if (find(grant, newGrants) == null) {
+			
+			
+			for (RolGrant grant: currentGrants) { 
+				if (find(grant, newGrants) == null) { 
+	
 					log.warn("Permission "+grant.getRolName()+" has been added locally");
+					if(find(grant,previousGrants)==null)grantResults.add(grant);
 				}
 			}
-			saveGrants(acc, newGrants, svc);
+			log.info("grantResults --> "+grantResults);
+			saveGrants(acc, grantResults, svc);
 		} else {
 			currentGrants = new LinkedList<>(currentGrants);
 			for (RolGrant newGrant: newGrants) {
@@ -135,10 +157,32 @@ public class DeltaChangesManager {
 	}
 	
 	public void saveGrants(es.caib.seycon.ng.comu.Account acc, List<RolGrant> grants, ServerService svc) throws JSONException, InternalErrorException, AccountAlreadyExistsException, IOException {
+				
 		if (updateDeltaAttribute(acc, grants)) {
 			try {
 				Method m = svc.getClass().getMethod("reconcileAccount", Account.class, List.class);
-				svc.reconcileAccount(acc, null);
+				List<RolAccount> raList = new ArrayList<RolAccount>();
+				for (RolGrant r : grants) {
+					log.info("Rol on list: "+r.getRolName());
+					RolAccount ra = new RolAccount();
+					ra.setAccountId(acc.getId());
+					ra.setNomRol(r.getRolName());
+					ra.setEnabled(r.isEnabled());
+					ra.setApprovalPending(false);
+					ra.setAccountDispatcher(acc.getDispatcher());
+					ra.setBaseDeDades(acc.getDispatcher());
+					raList.add(ra);
+				}
+				
+				svc.reconcileAccount(acc, raList);
+				//Collection<RolAccount> ra = new RemoteServiceLocator().getAplicacioService().findRolAccountByAccount(acc.getId());
+				List<RolGrant> ra = (List<RolGrant> )new RemoteServiceLocator().getAplicacioService().findEffectiveRolGrantByAccount(acc.getId());
+				log.info("Delta granted Roles to be saved at the end:" + ra);
+				boolean o =updateDeltaAttribute(acc, ra);
+				new RemoteServiceLocator().getAccountService().updateAccount2(acc);
+				log.info("Delta granted(?"+o+") Roles saved at the end: "+getPreviousGrants(acc));
+				
+				
 			} catch (NoSuchMethodException e) {
 				new RemoteServiceLocator().getAccountService().updateAccount2(acc);
 			}

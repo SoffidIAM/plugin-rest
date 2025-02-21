@@ -2,6 +2,7 @@ package com.soffid.iam.sync.agent.json;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Method;
@@ -11,6 +12,7 @@ import java.net.Proxy.Type;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.rmi.RemoteException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -21,6 +23,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.GZIPInputStream;
 
 import javax.ws.rs.core.MediaType;
 import javax.xml.parsers.DocumentBuilder;
@@ -56,6 +59,7 @@ import org.w3c.dom.Text;
 
 import com.soffid.iam.api.AccountStatus;
 import com.soffid.iam.api.HostService;
+import com.soffid.iam.api.RoleAccount;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuth;
 import com.soffid.iam.sync.agent.json.token.oauth.TokenHandlerOAuthImpl;
 
@@ -64,6 +68,7 @@ import es.caib.seycon.ng.comu.Grup;
 import es.caib.seycon.ng.comu.ObjectMappingTrigger;
 import es.caib.seycon.ng.comu.Password;
 import es.caib.seycon.ng.comu.Rol;
+import es.caib.seycon.ng.comu.RolAccount;
 import es.caib.seycon.ng.comu.RolGrant;
 import es.caib.seycon.ng.comu.SoffidObjectTrigger;
 import es.caib.seycon.ng.comu.SoffidObjectType;
@@ -250,7 +255,6 @@ public class JSONAgent extends Agent
 	@SuppressWarnings("unchecked")
 	public Collection<AuthoritativeChange> getChanges(String lastChange) throws InternalErrorException {
 		LinkedList<AuthoritativeChange> changes = new LinkedList<AuthoritativeChange>();
-
 		try {
 			for (ExtensibleObjectMapping mapping : objectMappings) {
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_USER)) {
@@ -406,7 +410,6 @@ public class JSONAgent extends Agent
 	}
 
 	public void updateGroup(String name, Grup group) throws RemoteException, InternalErrorException {
-
 		try {
 			GroupExtensibleObject sourceObject = new GroupExtensibleObject(group, getCodi(), getServer());
 			for (ExtensibleObjectMapping mapping : objectMappings) {
@@ -722,6 +725,7 @@ public class JSONAgent extends Agent
 	}
 
 	private void updateAccountGrants(Account account, boolean isDisabled, ExtensibleObject object, ExtensibleObject sourceObject) throws Exception {
+		
 		try {
 			String accountName = account.getName();
 			for (ExtensibleObjectMapping mapping : objectMappings) {
@@ -743,6 +747,7 @@ public class JSONAgent extends Agent
 						log.info("Using " + mapping.getSystemObject() + " mapping to update " + accountName + " roles");
 					
 					List<RolGrant> grants = new LinkedList<>(getServer().getAccountRoles(accountName, getCodi()));
+					
 					String remove = mapping.getProperties().get("removeForDisabledAccounts");
 					if ("true".equals(remove) && isDisabled)
 						grants.clear();
@@ -756,6 +761,7 @@ public class JSONAgent extends Agent
 					try {
 						mapping.setCondition(null);
 						ExtensibleObject jsonObj = objectTranslator.generateObject(geo, mapping);
+						
 						if (jsonObj != null) {
 							boolean foundSelect = false;
 							final LinkedList<RolGrant> existingRoles = new LinkedList<>();
@@ -774,6 +780,7 @@ public class JSONAgent extends Agent
 										}
 									}
 								}
+								
 								new DeltaChangesManager(log).apply(account, existingRoles, grants, getServer(), deltaChanges, new RoleGrantDeltaChangesAction() {
 									@Override
 									public void remove(RolGrant currentGrant) throws Exception {
@@ -803,7 +810,7 @@ public class JSONAgent extends Agent
 									
 									@Override
 									public void add(RolGrant grant) throws Exception {
-										int pos = existingRoles.indexOf(grant);
+										int pos = grants.indexOf(grant);
 										if (pos >= 0) {
 											grant.setOwnerAccountName(accountName);
 											grant.setOwnerDispatcher(getCodi());
@@ -824,11 +831,15 @@ public class JSONAgent extends Agent
 										}
 									}
 								});
+								
+								
 							}
 						}
+					
 					} finally {
 						mapping.setCondition(condition);
 					}
+					
 				}
 			}
 		} catch (JSONException e) {
@@ -1155,8 +1166,11 @@ public class JSONAgent extends Agent
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_USER)) {
 					ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 					if (obj != null) {
+						
 						updateObject(acc, sourceObject, obj);
+						
 						updateAccountGrants(acc, acc.isDisabled(),  obj, sourceObject);
+						
 					}
 				}
 			}
@@ -1175,7 +1189,6 @@ public class JSONAgent extends Agent
 	}
 
 	public void updateUser(Account acc) throws InternalErrorException {
-
 		ExtensibleObject sourceObject = new AccountExtensibleObject(acc, getServer());
 		sourceObject.setAttribute("password", getPassword(acc).getPassword());
 		try {
@@ -1183,8 +1196,11 @@ public class JSONAgent extends Agent
 				if (mapping.getSoffidObject().equals(SoffidObjectType.OBJECT_ACCOUNT)) {
 					ExtensibleObject obj = objectTranslator.generateObject(sourceObject, mapping);
 					if (obj != null) {
+						
 						updateObject(acc, sourceObject, obj);
+						
 						updateAccountGrants(acc, acc.isDisabled(), obj, sourceObject);
+						
 					}
 				}
 			}
@@ -2150,6 +2166,7 @@ public class JSONAgent extends Agent
 			ExtensibleObject existingObject = searchJsonObject(targetObject, soffidObject);
 
 			ExtensibleObject obj2 = targetObject;
+			
 			if (existingObject == null) {
 				boolean triggerRan = false;
 				ExtensibleObjects response = null;
@@ -2181,11 +2198,33 @@ public class JSONAgent extends Agent
 				}
 			}
 			if (acc != null && deltaChanges) {
+				/*
 				if (new DeltaChangesManager(log).updateDeltaAttribute(acc, obj2))
 				{
 					try {
 						Method m = getServer().getClass().getMethod("reconcileAccount", Account.class, List.class);
+						List<RolGrant> rgList = getAccountGrants(acc.getName());
+						log.info("AccountGrants: "+rgList.toString());
+						List<RolAccount> raList = new ArrayList<RolAccount>();
+						for (RolGrant rg : rgList) {
+							log.info("Rol on list: "+rg.getRolName());
+							RolAccount ra = new RolAccount();
+							ra.setAccountId(acc.getId());
+							ra.setNomRol(rg.getRolName());
+							ra.setEnabled(rg.isEnabled());
+							ra.setApprovalPending(false);
+							ra.setAccountDispatcher(getCodi());
+							ra.setBaseDeDades(getCodi());
+							//log.info("- RoleAccount -> "+ra);
+							//log.info("- getCodi -------> "+getCodi());
+							raList.add(ra);
+						}
+						//log.info("- Account -> "+acc);
+						log.info("RolAccount: "+raList.toString());
+						
 						getServer().reconcileAccount(acc, null);
+						//new DeltaChangesManager(log).updateDeltaAttribute(acc, obj2);
+						//getServer().reconcileAccount(acc, null);
 					} catch (NoSuchMethodException e) {
 						try {
 							new RemoteServiceLocator().getAccountService().updateAccount2(acc);
@@ -2195,7 +2234,7 @@ public class JSONAgent extends Agent
 							throw new InternalErrorException("Error updating account snapshot", e1);
 						}
 					}
-				}
+				}*/
 			}
 		} catch (Exception e) {
 			String error = (targetObject.toString().length() > MAX_LOG) ? targetObject.toString().substring(0, MAX_LOG)
