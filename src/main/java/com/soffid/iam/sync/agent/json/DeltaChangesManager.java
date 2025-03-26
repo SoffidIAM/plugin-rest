@@ -56,14 +56,10 @@ public class DeltaChangesManager {
 			throws Exception {
 		
 		List<RolGrant> grantResults = new ArrayList<RolGrant>(newGrants);
-		log.info("Azure granted Roles --> "+currentGrants);
-		log.info("Soffid granted Roles --> "+newGrants);
 		
 		if (delta) {
 			List<RolGrant> previousGrants = getPreviousGrants(acc);
-			log.info("Delta-variable granted Roles --> "+previousGrants);
 			for (RolGrant newGrant: newGrants) { 
-				log.info("newGrant -> "+newGrant.getRolName());
 				RolGrant cg = find(newGrant, previousGrants) ;
 				if ( cg != null) { // Already asigned in the past => ignore 
 					previousGrants.remove(cg);
@@ -92,7 +88,6 @@ public class DeltaChangesManager {
 					if(find(grant,previousGrants)==null)grantResults.add(grant);
 				}
 			}
-			log.info("grantResults --> "+grantResults);
 			saveGrants(acc, grantResults, svc);
 		} else {
 			currentGrants = new LinkedList<>(currentGrants);
@@ -163,7 +158,7 @@ public class DeltaChangesManager {
 				Method m = svc.getClass().getMethod("reconcileAccount", Account.class, List.class);
 				List<RolAccount> raList = new ArrayList<RolAccount>();
 				for (RolGrant r : grants) {
-					log.info("Rol on list: "+r.getRolName());
+					log.info("Role to be reconciled: "+r.getRolName());
 					RolAccount ra = new RolAccount();
 					ra.setAccountId(acc.getId());
 					ra.setNomRol(r.getRolName());
@@ -175,12 +170,9 @@ public class DeltaChangesManager {
 				}
 				
 				svc.reconcileAccount(acc, raList);
-				//Collection<RolAccount> ra = new RemoteServiceLocator().getAplicacioService().findRolAccountByAccount(acc.getId());
 				List<RolGrant> ra = (List<RolGrant> )new RemoteServiceLocator().getAplicacioService().findEffectiveRolGrantByAccount(acc.getId());
-				log.info("Delta granted Roles to be saved at the end:" + ra);
 				boolean o =updateDeltaAttribute(acc, ra);
 				new RemoteServiceLocator().getAccountService().updateAccount2(acc);
-				log.info("Delta granted(?"+o+") Roles saved at the end: "+getPreviousGrants(acc));
 				
 				
 			} catch (NoSuchMethodException e) {
