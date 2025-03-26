@@ -10,7 +10,7 @@
 		<dependency>
 			<groupId>com.soffid.iam.sync</groupId>
 			<artifactId>syncserver</artifactId>
-			<version>3.6.19-SNAPSHOT</version>
+			<version>3.6.20</version>
 		</dependency> 
 		<dependency>
 			<groupId>org.apache.wink</groupId>
