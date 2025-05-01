@@ -13,6 +13,13 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -38,8 +45,14 @@ import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import org.apache.http.conn.scheme.PlainSocketFactory;
+import org.apache.http.conn.scheme.Scheme;
+import org.apache.http.conn.scheme.SchemeRegistry;
+import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
+import org.apache.http.impl.conn.SchemeRegistryFactory;
+import org.apache.http.impl.conn.SingleClientConnManager;
 import org.apache.wink.client.ClientResponse;
 import org.apache.wink.client.ClientRuntimeException;
 import org.apache.wink.client.ClientWebException;
@@ -134,6 +147,8 @@ public class JSONAgent extends Agent
 	Map<String, String> templates = new HashMap<String, String>();
 	Map<String, String> oauthParams = new HashMap<String, String>();
 	private boolean deltaChanges;
+	private byte[] pkcs12;
+	private Password pkcs12pin;
 
 	/**
 	 * Constructor
@@ -201,6 +216,15 @@ public class JSONAgent extends Agent
 				if (proxyHost != null && !proxyHost.trim().isEmpty()) {
 					this.proxyPort = Integer.parseInt(json.optString("proxyPort"));
 				}
+				String p12 = json.optString("pkcs12file", null);
+				if (p12 != null) {
+					if (p12.contains(":")) p12 = p12.substring(p12.indexOf(":")+1);
+					this.pkcs12 = Base64.getDecoder().decode(p12);
+				}
+				String pkcs12pin = json.optString("pkcs12pin");
+				if (pkcs12pin != null) {
+					this.pkcs12pin = Password.decode(pkcs12pin);
+				}
 			}
 		} catch (UnsupportedEncodingException e) {
 			throw new InternalErrorException("Error parsing templates", e);
@@ -214,8 +238,16 @@ public class JSONAgent extends Agent
 	}
 
 	protected void createClient() {
-		DefaultHttpClient httpClient = new DefaultHttpClient();
-		DefaultHttpClient httpClient2 = new DefaultHttpClient();
+        SchemeRegistry registry = new SchemeRegistry();
+        registry.register(
+                new Scheme("http", 80, PlainSocketFactory.getSocketFactory()));
+        registry.register(
+                new Scheme("https", 443, getSslSocketFactory()));
+        
+        SingleClientConnManager sccm = new SingleClientConnManager(registry);
+        
+		DefaultHttpClient httpClient = new DefaultHttpClient(sccm);
+		DefaultHttpClient httpClient2 = new DefaultHttpClient(sccm);
 		if (proxyHost != null && !proxyHost.trim().isEmpty()) {
 			Proxy proxy = new Proxy(Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
 			log.info("Using proxy " + proxy);
@@ -247,6 +279,22 @@ public class JSONAgent extends Agent
 		}
 		config.setChunked(false);
 		client = new RestClient(config);
+	}
+
+	protected SSLSocketFactory getSslSocketFactory()  {
+		if (pkcs12 == null)
+			return SSLSocketFactory.getSocketFactory();
+		else  {
+			try {
+				KeyStore ks = KeyStore.getInstance("pkcs12", "BC");
+				String pass = pkcs12pin == null ? null: pkcs12pin.getPassword();
+				ks.load(new ByteArrayInputStream(pkcs12), 
+						pass.toCharArray());
+				return new SSLSocketFactory(ks, pass);
+			} catch (Exception e) {
+				throw new RuntimeException("Error decrypting pkcs12 file", e);
+			}
+		}
 	}
 
 	boolean moreData = false;

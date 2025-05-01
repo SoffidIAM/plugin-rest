@@ -5,7 +5,7 @@
 <?component name="input_password" macro-uri="comu/input_password.zul"?>
 
 <div id="xmlAgentTop">
-	<grid width="99%" id="configurationGrid">
+	<div width="100%" id="configurationGrid">
 		<attribute name='onCreate'>
 		<![CDATA[
 		consoleVersion = "2";
@@ -19,7 +19,7 @@
 	    	updateGrid ();
 	    	manageAttributesForAuthType ();
 	    } catch (Exception e) {
-	    	
+			e.printStackTrace();	    	
 	    }
 		]]>
 		</attribute>
@@ -34,7 +34,9 @@
        					
             String[] attributes = new String[] {
          		"proxyHost",
-         		"proxyPort"
+         		"proxyPort",
+         		"pkcs12file",
+         		"pkcs12pin"
             };
 		    pageScope.put("methodDescriptor", new String[][] {
 					new String[] {"Path", "* Path", "url", "Path relative to the agent base URL"},
@@ -130,17 +132,17 @@
 						Component c = configurationGrid.getFellowIfAny (attribute);
 						if (c != null)
 						{
-							String v = json.optString(attribute);
-							if (c instanceof Listbox)
-							{
-								c.setSelectedItem(null);
-								for ( item: c.getItems()) {
-									if (item.getValue() != null && item.getValue().equals(v))
-										c.setSelectedItem ( item );
-								}
+							String v = json.optString(attribute, null);
+							if (attribute.equals("pkcs12file") && v != null) {
+								c.setValue(com.soffid.iam.api.BinaryData.fromString(v));
+							}
+							else if (attribute.equals("pkcs12pin") && v != null) {
+								c.setValue(com.soffid.iam.api.Password.decode(v));
 							}
 							else
 								c.setValue ( v );
+							System.out.println("Setting "+attribute+"="+v);
+							c.invalidate();
 						}
 					}
 				}
@@ -173,16 +175,11 @@
 				for ( String attribute: attributes)
 				{
 					Component item = configurationGrid.getFellow (attribute);
-					String v = null;
-					if (item instanceof Listbox)
-					{
-						if (item.getSelectedItem() != null)
-							v = item.getSelectedItem().getValue();
+					Object v = null;
+					v = item.getValue();
+					if ( v != null) {
+						json.put(attribute, v.toString());
 					}
-					else
-						v = item.getValue();
-					if ( v != null)
-						json.put(attribute, v);
 				}
 
 				String t = json.toString();
@@ -204,10 +201,10 @@
 				
 				String grantType;
 				Component authMethod = configurationGrid.getFellow("authMethod");
-				if("tokenOAuthCC".equals(authMethod.getSelectedItem().getValue())){
+				if("tokenOAuthCC".equals(authMethod.getValue())){
 					grantType = "client_credentials";
 				}
-				if("tokenOAuthPG".equals(authMethod.getSelectedItem().getValue())){
+				if("tokenOAuthPG".equals(authMethod.getValue())){
 					grantType = "password";
 				}
 				
@@ -275,210 +272,121 @@
 			
 			void manageAttributesForAuthType() {
 				Component authMethod = configurationGrid.getFellow("authMethod");
-				if (authMethod.getSelectedItem() == null) {
-					userRow.setVisible(true);
-					passRow.setVisible(true);
-					authURLRow.setVisible(true);
-					tokenAttributeRow.setVisible(true);
-					oauthRow.setVisible(false);
-					tokenRow.setVisible(false);
-				} else if ("".equals(authMethod.getSelectedItem().getValue())) {
-					userRow.setVisible(false);
-					passRow.setVisible(false);
-					authURLRow.setVisible(false);
-					tokenAttributeRow.setVisible(false);
-					oauthRow.setVisible(false);
-					tokenRow.setVisible(false);
-				} else if ("basic".equals(authMethod.getSelectedItem().getValue())) {
-					userRow.setVisible(true);
-					passRow.setVisible(true);
-					authURLRow.setVisible(false);
-					tokenAttributeRow.setVisible(false);
-					oauthRow.setVisible(false);
-					tokenRow.setVisible(false);
-				} else if ("token".equals(authMethod.getSelectedItem().getValue())) {
-					userRow.setVisible(true);
-					passRow.setVisible(true);
-					authURLRow.setVisible(true);
-					tokenAttributeRow.setVisible(false);
-					oauthRow.setVisible(false);
-					tokenRow.setVisible(false);
-				} else if ("bearer".equals(authMethod.getSelectedItem().getValue())) {
-					userRow.setVisible(false);
-					passRow.setVisible(false);
-					authURLRow.setVisible(false);
-					tokenAttributeRow.setVisible(false);
-					oauthRow.setVisible(false);
-					tokenRow.setVisible(true);
-				} else if ("tokenOAuthCC".equals(authMethod.getSelectedItem().getValue())) {
-					userRow.setVisible(false);
-					passRow.setVisible(false);
-					authURLRow.setVisible(true);
-					tokenAttributeRow.setVisible(true);
-					oauthRow.setVisible(true);
-					tokenRow.setVisible(false);
-				} else if ("tokenOAuthPG".equals(authMethod.getSelectedItem().getValue())) {
-					userRow.setVisible(true);
-					passRow.setVisible(true);
-					authURLRow.setVisible(true);
-					tokenAttributeRow.setVisible(true);
-					oauthRow.setVisible(true);
-					tokenRow.setVisible(false);
+				String method = authMethod.getValue();
+				if (method == null) {
+					user.setVisible(true);
+					pass.setVisible(true);
+					authUrl.setVisible(true);
+					tokenToUse.setVisible(true);
+					client_id.setVisible(false);
+					client_secret.setVisible(false);
+					scope.setVisible(false);
+					bearertoken.setVisible(false);
+				} else if ("".equals(method)) {
+					user.setVisible(false);
+					pass.setVisible(false);
+					authUrl.setVisible(false);
+					tokenToUse.setVisible(false);
+					client_id.setVisible(false);
+					client_secret.setVisible(false);
+					scope.setVisible(false);
+					bearertoken.setVisible(false);
+				} else if ("basic".equals(method)) {
+					user.setVisible(true);
+					pass.setVisible(true);
+					authUrl.setVisible(false);
+					tokenToUse.setVisible(false);
+					client_id.setVisible(false);
+					client_secret.setVisible(false);
+					scope.setVisible(false);
+					bearertoken.setVisible(false);
+				} else if ("token".equals(method)) {
+					user.setVisible(true);
+					pass.setVisible(true);
+					authUrl.setVisible(true);
+					tokenToUse.setVisible(false);
+					client_id.setVisible(false);
+					client_secret.setVisible(false);
+					scope.setVisible(false);
+					bearertoken.setVisible(false);
+				} else if ("bearer".equals(method)) {
+					user.setVisible(false);
+					pass.setVisible(false);
+					authUrl.setVisible(false);
+					tokenToUse.setVisible(false);
+					client_id.setVisible(false);
+					client_secret.setVisible(false);
+					scope.setVisible(false);
+					bearertoken.setVisible(true);
+				} else if ("tokenOAuthCC".equals(method)) {
+					user.setVisible(false);
+					pass.setVisible(false);
+					authUrl.setVisible(true);
+					tokenToUse.setVisible(true);
+					client_id.setVisible(true);
+					client_secret.setVisible(true);
+					scope.setVisible(true);
+					bearertoken.setVisible(false);
+				} else if ("tokenOAuthPG".equals(method)) {
+					user.setVisible(true);
+					pass.setVisible(true);
+					authUrl.setVisible(true);
+					tokenToUse.setVisible(true);
+					client_id.setVisible(true);
+					client_secret.setVisible(true);
+					scope.setVisible(true);
+					bearertoken.setVisible(false);
 				}
 			}
 		]]>
 		</zscript>
-		<columns visible="false"><column width="14%"/><column/> </columns>
-		<rows>
-			<row>
-				<input_etiqueta value="Server URL" />
-				<hbox width="90%">
-					<input_dada bind="@param4" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
-			<row id="userRow">
-				<input_etiqueta value="User name" />
-				<hbox width="90%">
-					<input_dada bind="@param0" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
-			<row id="passRow">
-				<input_etiqueta value="Password" />
-				<hbox width="90%">
-					<input_password bind="@param1" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
-			<row>
-				<input_etiqueta value="Authentication method" />
-				<listbox id="authMethod" bind="@param2" mold="select"  disabled="{!canModifyAgent}" width="400px">
-					<attribute name="onSelect">
-					<![CDATA[
-						manageAttributesForAuthType();
-					]]>
-					</attribute>
-					<attribute name="onCreate">
-					<![CDATA[
-						manageAttributesForAuthType();
-					]]>
-					</attribute>
-					<listitem value="">
-						<listcell label="None"/>
-					</listitem>
-					<listitem value="basic">
-						<listcell label="Basic"/>
-					</listitem>
-					<listitem value="bearer">
-						<listcell label="Bearer token"/>
-					</listitem>
-					<listitem value="token">
-						<listcell label="Token"/>
-					</listitem>
-					<listitem value="tokenOAuthCC">
-						<listcell label="Token OAuth Client Credentials"/>
-					</listitem>
-					<listitem value="tokenOAuthPG">
-						<listcell label="Token OAuth Password Grant"/>
-					</listitem>					
-				</listbox>
-			</row>
-			<row id="authURLRow">
-				<input_etiqueta value="Authentication URL" />
-				<hbox width="90%">
-					<input_dada bind="@param3" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
-			<row id="tokenRow">
-				<input_etiqueta value="Bearer token" />
-				<hbox width="90%">
-					<input_dada bind="@param0" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
-			<row id="tokenAttributeRow">
-				<input_etiqueta value="Token attr. output" />
-				<hbox width="90%">
-					<input_dada bind="@param7" lectura="${!canModifyAgent}"
-						width_custom="98%" />
-				</hbox>
-			</row>
-			<row id="oauthRow">
-				<input_etiqueta value="Request parameters" />
-				<grid>
-					<columns visible="false"><column width="14%"/><column/> </columns>
-					<rows>
-						<row>
-							<input_etiqueta value="Client ID" />
-							<hbox width="90%">
-								<textbox width="96%" id="client_id" onChange='updateOAuthParams()'/>
-							</hbox>
-						</row>
-						<row>
-							<input_etiqueta value="Client secret" />
-							<hbox width="90%">
-								<textbox width="96%" id="client_secret" onChange='updateOAuthParams()'/>
-							</hbox>
-						</row>					
-						<row>
-							<input_etiqueta value="Scope" />
-							<hbox width="90%">
-								<textbox width="96%" id="scope" onChange='updateOAuthParams()'/>
-							</hbox>
-						</row>												
-					</rows>
-				</grid>
-			</row>
-			<row>
-				<input_etiqueta value="Enable debug" />
-				<listbox bind="@param8" mold="select"  disabled="{!canModifyAgent}" width="100px">
-					<listitem value="false">
-						<listcell label="No"/>
-					</listitem>
-					<listitem value="true">
-						<listcell label="Yes"/>
-					</listitem>
-				</listbox>
-			</row>
-			<row>
-				<input_etiqueta value="Delta changes" />
-				<listbox bind="@param9" mold="select"  disabled="{!canModifyAgent}" width="100px">
-					<listitem value="false">
-						<listcell label="No"/>
-					</listitem>
-					<listitem value="true">
-						<listcell label="Yes"/>
-					</listitem>
-				</listbox>
-			</row>
-			<row >
-				<input_etiqueta value="Proxy host" />
-				<hbox width="90%">
-					<textbox width="98%" id="proxyHost" onChange="updateBlob()"/>
-				</hbox>
-			</row>
-			<row>
-				<input_etiqueta value="Proxy port" />
-				<hbox width="90%">
-					<textbox width="98%" id="proxyPort" onChange="updateBlob()"/>
-				</hbox>
-			</row>
-			<row>
-				<input_etiqueta value="XML Templates" />
-				<grid id="xmlTemplates">
-					<columns>
-						<column label="name" width="*"></column>
-						<column label=" " width="80px"></column>
-					</columns>
-					<rows></rows>
-				</grid>
-				<button label="New template" onClick="newTemplate()">
-				</button>
-			</row>
-		</rows>
-	</grid>
+		<customfield3 label="Server URL" dataType="STRING" bind="@param4" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Authentication method" dataType="STRING" bind="@param2" id="authMethod" readonly="${!canModifyAgent}"
+			listOfValues=": none, basic: Basic, bearer: Bearer token, token: Token, 
+						tokenOAuthCC: oAuth client credentials,
+						tokenOAuthPG: oAuth password grant">
+			<attribute name="onChange">
+			<![CDATA[
+				manageAttributesForAuthType();
+			]]>
+			</attribute>
+			<attribute name="onCreate">
+			<![CDATA[
+				manageAttributesForAuthType();
+			]]>
+			</attribute>
+		</customfield3>
+		<customfield3 label="Authentication URL" dataType="STRING" bind="@param3" id="authUrl" readonly="${!canModifyAgent}"/>
+		<customfield3 label="User name" dataType="STRING" bind="@param0" id="user" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Password" dataType="PASSWORD" bind="@param1" id="pass" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Bearer token" dataType="STRING" bind="@param0" id="bearertoken" readonly="${!canModifyAgent}"/>
+		<customfield3 label="oAuth client id " dataType="STRING" id="client_id" readonly="${!canModifyAgent}"
+			onChange="updateOAuthParams()"/>
+		<customfield3 label="oAuth client secret " dataType="STRING" id="client_secret" readonly="${!canModifyAgent}"
+			onChange="updateOAuthParams()"/>
+		<customfield3 label="oAuth scope" dataType="STRING" id="scope" readonly="${!canModifyAgent}"
+			onChange="updateOAuthParams()"/>
+		<customfield3 label="Token to use " dataType="STRING" bind="@param7" id="tokenToUse" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Debug mode" dataType="BOOLEAN" bind="@param8" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Delta changes" dataType="BOOLEAN" bind="@param9" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Proxy host" dataType="STRING" id="proxyHost" onChange="updateBlob()" readonly="${!canModifyAgent}"/>
+		<customfield3 label="Proxy port" dataType="NUMBER" id="proxyPort" onChange="updateBlob()" readonly="${!canModifyAgent}"/>
+		<customfield3 dataType="binary" id="pkcs12file" onChange="updateBlob()" label="Client PCKS12 file"/>
+		<customfield3 dataType="password" id="pkcs12pin" onChange="updateBlob()" label="Client PCKS12 PIN"/>
+		<div>
+			<input_etiqueta value="XML Templates" />
+			<grid id="xmlTemplates">
+				<columns>
+					<column label="name" width="*"></column>
+					<column label=" " width="80px"></column>
+				</columns>
+				<rows></rows>
+			</grid>
+			<button label="New template" onClick="newTemplate()">
+			</button>
+		</div>
+	</div>
+		
 	<window closable="true" id="edw" position="center, center" onCancel="" title="${c:l('editorJS.Titol')}" visible="false" width="90%">
 		<attribute name="onClose">
 			event.stopPropagation ();
