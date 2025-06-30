@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
@@ -1564,7 +1565,9 @@ public class JSONAgent extends Agent
 					if (mimeType != null && mimeType.contains("json")) {
 						String txt = response.getEntity(String.class);
 						parseJsonObject(m, path, txt, resp);
-					} else if (mimeType != null && mimeType.contains("xml")) {
+						if (! resp.containsKey("Headers"))
+							resp.put("Headers", response.getHeaders());
+ 					} else if (mimeType != null && mimeType.contains("xml")) {
 						byte[] r = response.getEntity(byte[].class);
 						parseXmlObject(m, path, r, resp);
 					} else {
@@ -1874,26 +1877,31 @@ public class JSONAgent extends Agent
 				return encodeDirect(m, object);
 			}
 		} else if (MediaType.APPLICATION_JSON.equalsIgnoreCase(m.encoding)) {
-			HashMap<String, Object> hm = new HashMap<String, Object>();
-			if (m.parameters == null) {
-				for (String att : object.getAttributes()) {
-					if (object.getAttribute(att) != null) {
-						hm.put(att, object.getAttribute(att));
-					}
-				}
+			if (m.singleObject != null) {
+				Object value = object.getAttribute(m.singleObject);
+				return java2json(value).toString();
 			} else {
-				for (String att : m.parameters) {
-					Object value = reviewObjectAndRemoveNulls(object.getAttribute(att));
-					if (value != null) {
-						hm.put(att, value);
+				HashMap<String, Object> hm = new HashMap<String, Object>();
+				if (m.parameters == null) {
+					for (String att : object.getAttributes()) {
+						if (object.getAttribute(att) != null) {
+							hm.put(att, object.getAttribute(att));
+						}
+					}
+				} else {
+					for (String att : m.parameters) {
+						Object value = reviewObjectAndRemoveNulls(object.getAttribute(att));
+						if (value != null) {
+							hm.put(att, value);
+						}
 					}
 				}
+				if (debug)
+					log.info("hm: " + hm);
+				if (hm.isEmpty())
+					return null;
+				return java2json(hm).toString();
 			}
-			if (debug)
-				log.info("hm: " + hm);
-			if (hm.isEmpty())
-				return null;
-			return java2json(hm).toString();
 		} else {
 			throw new InternalErrorException("Not supported encoding: " + m.encoding);
 		}
@@ -2183,6 +2191,8 @@ public class JSONAgent extends Agent
 					im.parameters = mapping.getProperties().get(k).split("[, ]+");
 				else if (tag.equalsIgnoreCase("Template"))
 					im.template = mapping.getProperties().get(k);
+				else if (tag.equalsIgnoreCase("SingleParam"))
+					im.singleObject = mapping.getProperties().get(k);
 				else if (tag.toLowerCase().startsWith("header")) {
 					String v = mapping.getProperties().get(k);
 					int i = v.indexOf(':');

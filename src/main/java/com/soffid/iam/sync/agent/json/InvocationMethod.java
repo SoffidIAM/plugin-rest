@@ -18,4 +18,5 @@ public class InvocationMethod
 	public List<String[]> headers;
 	public String[] failureCodes;
 	public String[] successCodes;
+	public String singleObject;
 }
