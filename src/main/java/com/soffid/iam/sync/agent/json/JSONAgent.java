@@ -222,7 +222,7 @@ public class JSONAgent extends Agent
 					if (p12.contains(":")) p12 = p12.substring(p12.indexOf(":")+1);
 					this.pkcs12 = Base64.getDecoder().decode(p12);
 				}
-				String pkcs12pin = json.optString("pkcs12pin");
+				String pkcs12pin = json.optString("pkcs12pin", null);
 				if (pkcs12pin != null) {
 					this.pkcs12pin = Password.decode(pkcs12pin);
 				}
