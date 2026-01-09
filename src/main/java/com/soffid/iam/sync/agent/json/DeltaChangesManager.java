@@ -106,12 +106,14 @@ public class DeltaChangesManager {
 	}
 
 	private RolGrant find(RolGrant newGrant, List<RolGrant> currentGrants) {
-		for (RolGrant g: currentGrants) {
-			if (g.getRolName().equals(newGrant.getRolName())) {
-				if (g.getDomainValue() == null ? 
-						newGrant.getDomainValue() == null : 
-						g.getDomainValue().equals(newGrant.getDomainValue()))
-					return g;
+		if (currentGrants != null) {
+			for (RolGrant g: currentGrants) {
+				if (g.getRolName().equals(newGrant.getRolName())) {
+					if (g.getDomainValue() == null ? 
+							newGrant.getDomainValue() == null : 
+							g.getDomainValue().equals(newGrant.getDomainValue()))
+						return g;
+				}
 			}
 		}
 		return null;
