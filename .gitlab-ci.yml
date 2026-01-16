@@ -48,7 +48,7 @@ maven_deploy:
     - mvn deploy $MAVEN_CLI_OPTS  $MAVEN_CERT_OPTS -s $DEPLOYER_SETTINGS
   rules:
     - when: manual
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG != null
 
 maven_compile:
   stage: test
@@ -81,7 +81,6 @@ maven_release:
     - git push gitlab --tags
   rules:
     - if: $CI_COMMIT_BRANCH == "master"
-      when: manual
 
 release_job_mvn:
   stage: deploy
